@@ -38,6 +38,7 @@ path of a run succeeding.
 - [docs/privacy.md](docs/privacy.md): what is stored and how to delete it.
 - [docs/evaluation.md](docs/evaluation.md): how we know it helps.
 - [docs/adr/](docs/adr/): decisions.
+- [docs/going-public.md](docs/going-public.md): the repository is developed as a public one and made public when the maintainer decides.
 
 ## License
 

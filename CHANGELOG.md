@@ -8,4 +8,5 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 ### Added
 
 - Vision, roadmap, the first-version spec, privacy and evaluation rules, ADRs 0001 and 0002.
+- A going-public checklist (`docs/going-public.md`).
 - The `enhance/v1` and `feedback/v1` contract schemas with examples, and a check that validates them.

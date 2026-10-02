@@ -18,7 +18,7 @@ commit-msg). Never `--no-verify`.
 
 ## Public vs private — the rule for every file
 
-Assume the repository is or will be public. Never commit: a real prompt from anyone, IP addresses, hostnames, key
+The GitHub repository is private until the maintainer marks it public (`docs/going-public.md`), but it is developed as a public one: every file, commit message, issue and PR text must be fit to be read by anyone today. Never commit: a real prompt from anyone, IP addresses, hostnames, key
 aliases, employer or project names, absolute home paths, session ids, API keys. Tests and examples use invented
 prompts. Personal setup lives in the gitignored `CLAUDE.local.md` and `data/`.
 
