@@ -1,0 +1,4 @@
+{
+  "request": { "prompt": "review my diff", "context": { "task_kind": "review" } },
+  "response": { "prompt": "Review the diff on this branch against main. List bugs first, each with file:line, then style issues. Skip praise.", "changed": true, "template_id": "tpl-review", "template_version": "1.2.0", "reason": "matches 14 past review prompts; this version was accepted 11 of 14 times", "task_kind": "review", "request_id": "req-0002", "held_out": false }
+}

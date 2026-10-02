@@ -1,0 +1,15 @@
+#!/bin/sh
+# 1. Denylist: blocks the commit if any staged file matches a term in .private-terms (scripts/check-private-terms.sh).
+# 2. Secret scan: gitleaks over the staged changes.
+set -eu
+
+"$(git rev-parse --show-toplevel)/scripts/check-private-terms.sh" --cached
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is not installed (https://github.com/gitleaks/gitleaks)." >&2
+  exit 1
+fi
+gitleaks git --staged --redact --no-banner -v >/dev/null || {
+  echo "pre-commit: gitleaks found a secret in staged changes (rerun: gitleaks git --staged -v)." >&2
+  exit 1
+}

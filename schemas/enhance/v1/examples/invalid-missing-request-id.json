@@ -1,0 +1,4 @@
+{
+  "request": { "prompt": "explain this module" },
+  "response": { "prompt": "explain this module", "changed": false, "template_id": null, "template_version": null, "reason": "pass-through", "held_out": false }
+}

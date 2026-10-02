@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Egoushka/whetstone/schemas/enhance/v1/enhance.schema.json",
+  "title": "enhance/v1",
+  "description": "The enhance tool: a prompt in, a better prompt (or the same one) out. A pass-through is a valid answer.",
+  "type": "object",
+  "required": ["request", "response"],
+  "additionalProperties": false,
+  "properties": {
+    "request": { "$ref": "#/$defs/request" },
+    "response": { "$ref": "#/$defs/response" }
+  },
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string" },
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+            "task_kind": { "type": "string" },
+            "client": { "type": "string" }
+          }
+        },
+        "deadline_ms": { "type": "integer", "minimum": 50, "maximum": 30000, "default": 1500 }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["prompt", "changed", "template_id", "template_version", "reason", "request_id", "held_out"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "changed": { "type": "boolean" },
+        "template_id": { "type": ["string", "null"] },
+        "template_version": { "type": ["string", "null"] },
+        "reason": { "type": "string" },
+        "task_kind": { "type": ["string", "null"] },
+        "request_id": { "type": "string", "minLength": 1 },
+        "held_out": { "type": "boolean" }
+      }
+    }
+  }
+}

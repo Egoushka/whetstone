@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Egoushka/whetstone/schemas/feedback/v1/feedback.schema.json",
+  "title": "feedback/v1",
+  "description": "The feedback tool: what happened after an enhance call. Every outcome field may be null when the client does not know it.",
+  "type": "object",
+  "required": ["request_id", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rewrite_accepted": { "type": ["boolean", "null"] },
+        "model_overridden": { "type": ["boolean", "null"] },
+        "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "cost_usd": { "type": ["number", "null"], "minimum": 0 },
+        "model": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

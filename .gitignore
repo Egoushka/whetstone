@@ -1,0 +1,18 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+.idea/
+TestResults/
+
+# OS / editors
+.DS_Store
+*.tmp
+
+# Private: never commit (CLAUDE.md, "Public vs private")
+.env*
+.private-terms
+data/
+*.db
+*.db-*
