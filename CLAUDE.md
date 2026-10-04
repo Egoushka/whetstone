@@ -10,6 +10,7 @@ executable with the MCP tools over HTTP and stdio; `tests/Whetstone.Tests` cover
 scripts/check.sh                                                                    # the one check before a push: format, build with warnings as errors, tests
 UV_CACHE_DIR=$TMPDIR/uv uv run --with jsonschema python3 scripts/check-schemas.py   # every schema example validates or fails as named
 gitleaks git --redact -v                                                            # secret scan over history
+scripts/audit-export.sh [cmd]                                                         # gitleaks over `whetstone export`: a second opinion on the store
 ```
 
 Hooks: `git config core.hooksPath .githooks` (denylist + gitleaks on pre-commit, denylist + Conventional Commits on

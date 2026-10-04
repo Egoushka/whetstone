@@ -7,6 +7,7 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ### Added
 
+- `scripts/audit-export.sh`: gitleaks over `whetstone export`, the audit step of goal 0.2's bar (it fails on a store holding an unredacted token, which the script's author checked once by hand).
 - The redactor (`Whetstone.Redaction.Redactor`): secret-shaped text becomes `[REDACTED:kind]` before anything is stored, in linear time, with a corpus of 31 secret shapes and 20 look-alikes that must be kept. The store calls it.
 - The memory store (ADR 0003): every `enhance` is stored, redacted, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (SQLite, directory 0700, file 0600; user data directory and `owner` by default), and `feedback` fills the outcome of the row with that `request_id`. The prompt is cut at 32,000 characters after redaction; the rewrite is not kept. A storage failure, a slow store or an unwritable directory changes no answer: it is counted as `store_failures` in `GET /health` and logged by exception type.
 - `nuget.config` limits restore to nuget.org.

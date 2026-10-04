@@ -24,6 +24,7 @@ Nothing else: no file contents, no model answers, no other users' data.
   names, emails and repository names. Known limits: an unlabelled 40- or 64-character hex secret reads as a git sha and is
   kept; a secret written in words is not a pattern. The corpus (`tests/Whetstone.Tests/Redaction/Corpus.cs`) is the list
   of shapes covered; add a shape there before fixing a miss.
+  `scripts/audit-export.sh` runs gitleaks over an export as a second opinion; a finding is a redaction miss.
 - **One store per user.** A file per user under the data directory (mode 0600, directory 0700); no query reads across
   stores.
 - **Export and delete.** `whetstone export` writes everything stored for the user as JSON lines; `whetstone forget`
