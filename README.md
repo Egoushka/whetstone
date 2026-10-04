@@ -13,7 +13,14 @@ dotnet run --project src/Whetstone.Server -- mcp                              # 
 WHETSTONE_API_KEY=... dotnet run --project src/Whetstone.Server -- serve      # MCP over HTTP at 127.0.0.1:7340/v1/mcp
 ```
 
-Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures`. Exporting and deleting what is stored comes next ([docs/privacy.md](docs/privacy.md)).
+Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures`. Take it out or delete it from a terminal ([docs/privacy.md](docs/privacy.md)):
+
+```bash
+dotnet run --project src/Whetstone.Server -- export > mine.jsonl                       # everything, as JSON lines
+dotnet run --project src/Whetstone.Server -- export --repository example/app --before 2026-10-01
+dotnet run --project src/Whetstone.Server -- forget --repository example/app           # counts, deletes nothing
+dotnet run --project src/Whetstone.Server -- forget --repository example/app --confirm # deletes
+```
 
 Over HTTP every MCP request needs `Authorization: Bearer <WHETSTONE_API_KEY>`; `GET /health` needs none.
 
@@ -36,7 +43,7 @@ Two MCP tools, versioned under [`schemas/`](schemas/):
 | tool | in | out |
 |---|---|---|
 | `enhance` | prompt, context | prompt, template id and version, reason, task kind |
-| `feedback` | template id and version, outcome | nothing |
+| `feedback` | request id, outcome | nothing |
 
 If whetstone is slow, down or has nothing to offer, the client sends the original prompt. whetstone is never in the
 path of a run succeeding.

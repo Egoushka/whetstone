@@ -29,6 +29,9 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
         return Path.Combine(dataDirectory, user, FileName);
     }
 
+    /// <summary>The commands' view of a user's store (ADR 0003). Reaches only that user's file, and never creates it.</summary>
+    public IStoreAdmin AdminFor(string user) => new SqliteStoreAdmin(PathFor(user));
+
     public IStore ForUser(string user)
     {
         var path = PathFor(user);

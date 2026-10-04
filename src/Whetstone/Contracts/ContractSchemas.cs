@@ -16,6 +16,8 @@ public static class ContractSchemas
 
     public static JsonElement FeedbackRequest { get; } = Standalone(Node("feedback"));
 
+    private static readonly JsonSchema ExportSchema = JsonSchema.FromText(Standalone(Node("export")).GetRawText());
+
     private static readonly JsonSchema EnhanceRequestSchema = JsonSchema.FromText(EnhanceRequest.GetRawText());
 
     private static readonly JsonSchema FeedbackRequestSchema = JsonSchema.FromText(FeedbackRequest.GetRawText());
@@ -25,6 +27,9 @@ public static class ContractSchemas
 
     /// <summary>Errors against feedback/v1; empty means valid.</summary>
     public static IReadOnlyList<string> ValidateFeedback(JsonElement request) => Validate(FeedbackRequestSchema, request);
+
+    /// <summary>Errors against export/v1, the schema of one line of <c>whetstone export</c>; empty means valid.</summary>
+    public static IReadOnlyList<string> ValidateExport(JsonElement record) => Validate(ExportSchema, record);
 
     private static IReadOnlyList<string> Validate(JsonSchema schema, JsonElement document)
     {

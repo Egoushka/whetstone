@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Egoushka/whetstone/schemas/export/v1/export.schema.json",
+  "title": "export/v1",
+  "description": "One line of `whetstone export`: one stored enhance call and what feedback reported for it. The prompt and every context field are already redacted; the rewrite is not kept.",
+  "type": "object",
+  "required": ["request_id", "created_at", "prompt", "truncated", "context", "answer", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time", "description": "UTC, when enhance answered." },
+    "prompt": { "type": "string", "description": "The prompt as sent, secrets replaced by [REDACTED:kind], cut at 32,000 characters." },
+    "truncated": { "type": "boolean", "description": "True when the prompt was cut." },
+    "context": {
+      "type": "object",
+      "description": "What the client sent beside the prompt; a field it did not send is left out.",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string" },
+        "commit": { "type": "string" },
+        "task_kind": { "type": "string" },
+        "client": { "type": "string" }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "required": ["changed", "template_id", "template_version", "held_out"],
+      "additionalProperties": false,
+      "properties": {
+        "changed": { "type": "boolean" },
+        "template_id": { "type": ["string", "null"] },
+        "template_version": { "type": ["string", "null"] },
+        "held_out": { "type": "boolean" }
+      }
+    },
+    "outcome": {
+      "description": "Null until the client reports through feedback; then what it reported, each field null when it did not know.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["reported_at"],
+          "additionalProperties": false,
+          "properties": {
+            "rewrite_accepted": { "type": ["boolean", "null"] },
+            "model_overridden": { "type": ["boolean", "null"] },
+            "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "cost_usd": { "type": ["number", "null"], "minimum": 0 },
+            "model": { "type": ["string", "null"] },
+            "reported_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      ]
+    }
+  }
+}

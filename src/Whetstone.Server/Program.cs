@@ -8,6 +8,10 @@ const string Usage = """
       mcp                                   the MCP tools over stdio, for a client that starts whetstone itself
       serve [--listen ADDR] [--port N]      MCP over HTTP at /v1/mcp and GET /health (127.0.0.1:7340 by default);
                                             the bearer key is read from WHETSTONE_API_KEY
+      export [--repository R] [--before DATE]
+                                            everything stored for you, as JSON lines (export/v1) on stdout
+      forget (--all | --repository R | --before DATE) [--confirm]
+                                            counts what would be deleted; with --confirm, deletes it
     Every request is stored, redacted, in <WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db
     (user data directory and "owner" by default).
     """;
@@ -32,11 +36,16 @@ var dataDirectory = Environment.GetEnvironmentVariable("WHETSTONE_DATA_DIR") is 
 using var stores = new SqliteStores(dataDirectory);
 // The reason is an exception type: a message may quote a prompt.
 var store = new GuardedStore(stores.ForUser(user), reason => Console.Error.WriteLine($"whetstone: could not store a request ({reason})"));
-Console.Error.WriteLine($"whetstone: storing requests, redacted, in {stores.PathFor(user)}");
 
 switch (args)
 {
+    case ["export", .. var exportOptions]:
+        // stdout is the data; the pipe closing early is the reader's choice, not an error.
+        return await Commands.ExportAsync(exportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["forget", .. var forgetOptions]:
+        return await Commands.ForgetAsync(forgetOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["mcp"]:
+        Console.Error.WriteLine($"whetstone: storing requests, redacted, in {stores.PathFor(user)}");
         using (var host = WhetstoneServer.CreateStdio(enhancer, Console.OpenStandardInput(), Console.OpenStandardOutput(), store))
         {
             // The transport stops the host when the client closes stdin.
@@ -44,6 +53,7 @@ switch (args)
         }
         return 0;
     case ["serve", .. var options]:
+        Console.Error.WriteLine($"whetstone: storing requests, redacted, in {stores.PathFor(user)}");
         string? Option(string name) => options.SkipWhile(o => o != name).Skip(1).FirstOrDefault();
         if (Environment.GetEnvironmentVariable("WHETSTONE_API_KEY") is not { Length: > 0 } key)
         {
