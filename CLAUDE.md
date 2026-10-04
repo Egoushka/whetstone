@@ -1,7 +1,8 @@
 # CLAUDE.md — whetstone
 
 A personal prompt enhancer behind two MCP tools, `enhance` and `feedback`. .NET 10 (ADR 0002): `src/Whetstone` holds
-the contract types, `tests/Whetstone.Tests` checks them against the schema examples. The first client is chargehand (`Egoushka/chargehand`).
+the contract types, the embedded schemas and the enhancer (`IEnhancer`, `PassThrough`); `src/Whetstone.Server` is the
+executable with the MCP tools over HTTP and stdio; `tests/Whetstone.Tests` covers both. The first client is chargehand (`Egoushka/chargehand`).
 
 ## Commands
 

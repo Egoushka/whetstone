@@ -3,8 +3,17 @@
 A prompt enhancer that learns from you. You write a prompt; whetstone returns a better one, built from your own past
 prompts that went well, and learns from what happened next.
 
-**Status: not usable yet.** This repository holds the vision, the roadmap, the first spec, the contract and its C#
-types. There is no server yet.
+**Status: pass-through.** The MCP server answers `enhance` with your prompt unchanged and accepts `feedback`; nothing
+is learned or stored yet (goal 0.1 of [ROADMAP.md](ROADMAP.md)).
+
+## Run it
+
+```bash
+dotnet run --project src/Whetstone.Server -- mcp                              # MCP over stdio
+WHETSTONE_API_KEY=... dotnet run --project src/Whetstone.Server -- serve      # MCP over HTTP at 127.0.0.1:7340/v1/mcp
+```
+
+Over HTTP every MCP request needs `Authorization: Bearer <WHETSTONE_API_KEY>`; `GET /health` needs none.
 
 ## How it works
 
