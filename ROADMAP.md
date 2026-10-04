@@ -7,9 +7,9 @@ Legend: ✅ done · ⏳ in progress · ▶ next · · later
 
 ## Stage 0 — It answers, and never gets in the way (0.1–0.3)
 
-- ▶ **0.1** The contract and a pass-through: `enhance` and `feedback` as MCP tools with `schemas/*/v1`, a server that
+- ✅ **0.1** The contract and a pass-through: `enhance` and `feedback` as MCP tools with `schemas/*/v1`, a server that
   returns the prompt unchanged, stores nothing, answers within its latency budget, and a client in chargehand's tests.
-- · **0.2** It remembers: every prompt and its outcome is stored per user, with secrets redacted before storage, and can
+- ▶ **0.2** It remembers: every prompt and its outcome is stored per user, with secrets redacted before storage, and can
   be exported and deleted (docs/privacy.md).
 - · **0.3** It retrieves: `enhance` returns your most similar past prompt that went well, filled in for this request,
   with the reason. No model call yet.
