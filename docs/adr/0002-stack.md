@@ -1,6 +1,6 @@
 # 0002. Stack: .NET 10, the MCP C# SDK, SQLite
 
-- Status: proposed
+- Status: accepted (2026-10-04)
 - Date: 2026-10-02
 
 ## Context
@@ -16,7 +16,7 @@ similarity over a few thousand prompts per user; goal 0.6 needs one model call.
 
 ## Decision
 
-Option 1, proposed. Start with FTS5 for 0.3; add embeddings only if lexical retrieval misses the acceptance bar
+Option 1. Start with FTS5 for 0.3; add embeddings only if lexical retrieval misses the acceptance bar
 (docs/evaluation.md).
 
 ## Consequences

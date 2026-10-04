@@ -1,17 +1,15 @@
 # CLAUDE.md — whetstone
 
-A personal prompt enhancer behind two MCP tools, `enhance` and `feedback`. Pre-code: the repository holds the vision,
-roadmap, spec, contract schemas and ADRs. The first client is chargehand (`Egoushka/chargehand`).
+A personal prompt enhancer behind two MCP tools, `enhance` and `feedback`. .NET 10 (ADR 0002): `src/Whetstone` holds
+the contract types, `tests/Whetstone.Tests` checks them against the schema examples. The first client is chargehand (`Egoushka/chargehand`).
 
 ## Commands
 
 ```bash
+scripts/check.sh                                                                    # the one check before a push: format, build with warnings as errors, tests
 UV_CACHE_DIR=$TMPDIR/uv uv run --with jsonschema python3 scripts/check-schemas.py   # every schema example validates or fails as named
 gitleaks git --redact -v                                                            # secret scan over history
 ```
-
-When code lands, `scripts/check.sh` becomes the one check before a push (format, build with warnings as errors, tests),
-as in chargehand.
 
 Hooks: `git config core.hooksPath .githooks` (denylist + gitleaks on pre-commit, denylist + Conventional Commits on
 commit-msg). Never `--no-verify`.
