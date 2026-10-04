@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Whetstone\Whetstone.csproj" />
+    <ProjectReference Include="..\..\src\Whetstone.Server\Whetstone.Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,4 +4,12 @@
     <InternalsVisibleTo Include="Whetstone.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\schemas\*\v1\*.schema.json" LogicalName="v1/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="JsonSchema.Net" Version="9.4.0" />
+  </ItemGroup>
+
 </Project>

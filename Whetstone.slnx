@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Whetstone/Whetstone.csproj" />
+    <Project Path="src/Whetstone.Server/Whetstone.Server.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Whetstone.Tests/Whetstone.Tests.csproj" />
