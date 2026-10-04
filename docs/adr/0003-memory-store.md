@@ -22,7 +22,7 @@ are exposed. ADR 0002 chose SQLite, one file per user.
 1. A key file mapping tokens to users now. The isolation is exercised end to end; a second user is a goal nobody has (VISION:
    no hosted service).
 2. **Chosen.** One key, one user (`WHETSTONE_USER`, default `owner`); the store path carries the user id, and the code reaches
-   a store only through `IStores.For(user)`. Tests prove two ids never share a file. A key map is additive later.
+   a store only through `IStores.ForUser(user)`. Tests prove two ids never share a file. A key map is additive later.
 
 **Redaction**
 1. Run gitleaks as a library or process. Maintained rules; a process per request or a port of its rules, and a hard

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Whetstone.Contracts;
+using Whetstone.Storage;
 
 namespace Whetstone.Server;
 
@@ -19,6 +20,12 @@ public static partial class Tools
 
     /// <summary>Share of deadline_ms the enhancer may use; the rest covers the transport back to the client.</summary>
     public const double AnswerShare = 0.8;
+
+    /// <summary>Share of deadline_ms the store may use after the answer is ready; with <see cref="AnswerShare"/> it leaves a twentieth for the way back.</summary>
+    public const double StoreShare = 0.15;
+
+    /// <summary>Feedback has no deadline of its own; a store that takes longer than this is counted as failing.</summary>
+    public static readonly TimeSpan FeedbackBudget = TimeSpan.FromSeconds(1);
 
     public static McpServerTool CreateEnhance()
     {
@@ -60,8 +67,9 @@ public static partial class Tools
         var request = arguments.Deserialize<EnhanceRequest>(ContractJson.Options)!;
 
         var services = context.Services!;
-        var response = await AnswerAsync(services.GetRequiredService<IEnhancer>(), request,
-            services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Tools)), ct);
+        var log = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Tools));
+        var response = await AnswerAsync(services.GetRequiredService<IEnhancer>(), request, log, ct);
+        await RememberAsync(services.GetRequiredService<IStore>(), request, response, log, ct);
         return new CallToolResult
         {
             StructuredContent = JsonSerializer.SerializeToElement(response, ContractJson.Options),
@@ -97,18 +105,49 @@ public static partial class Tools
         }
     }
 
-    private static Task<CallToolResult> FeedbackAsync(RequestContext<CallToolRequestParams> context, CancellationToken ct)
+    /// <summary>Stores the call (ADR 0003). Whatever goes wrong here, the answer already made is the answer.</summary>
+    private static async Task RememberAsync(IStore store, EnhanceRequest request, EnhanceResponse response, ILogger log, CancellationToken ct)
+    {
+        try
+        {
+            var row = RequestRow.From(request, response, TimeProvider.System.GetUtcNow());
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            budget.CancelAfter(TimeSpan.FromMilliseconds(request.DeadlineMs * StoreShare));
+            await store.RecordAsync(row, budget.Token);
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            RememberFailed(log, e.GetType().Name);
+        }
+    }
+
+    private static async Task<CallToolResult> FeedbackAsync(RequestContext<CallToolRequestParams> context, CancellationToken ct)
     {
         var arguments = Arguments(context.Params!);
         if (ContractSchemas.ValidateFeedback(arguments) is { Count: > 0 } errors)
-            return Task.FromResult(Invalid("feedback/v1", errors));
-        // Goal 0.1 accepts feedback and keeps nothing; storing outcomes is goal 0.2.
-        return Task.FromResult(new CallToolResult
+            return Invalid("feedback/v1", errors);
+        var request = arguments.Deserialize<FeedbackRequest>(ContractJson.Options)!;
+        var services = context.Services!;
+        try
+        {
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            budget.CancelAfter(FeedbackBudget);
+            // Feedback for a request this store never saw stores nothing, and is not an error.
+            await services.GetRequiredService<IStore>().RecordOutcomeAsync(OutcomeRow.From(request, TimeProvider.System.GetUtcNow()), budget.Token);
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            RememberFailed(services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Tools)), e.GetType().Name);
+        }
+        return new CallToolResult
         {
             StructuredContent = JsonSerializer.SerializeToElement(new { }),
             Content = [new TextContentBlock { Text = "{}" }],
-        });
+        };
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "could not store a request ({Type}); the answer was sent as made")]
+    private static partial void RememberFailed(ILogger log, string type);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "enhancer failed with {Type}; answered with the original prompt")]
     private static partial void EnhancerFailed(ILogger log, string type);

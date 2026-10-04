@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
+using Whetstone.Storage;
 
 namespace Whetstone.Server;
 
@@ -33,7 +34,7 @@ public static class WhetstoneServer
 
     public static string Version { get; } = typeof(WhetstoneServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-    public static WebApplication Create(ServerSettings settings, IEnhancer enhancer)
+    public static WebApplication Create(ServerSettings settings, IEnhancer enhancer, IStore? store = null)
     {
         if (string.IsNullOrEmpty(settings.ApiKey))
             throw new ArgumentException("an API key is required", nameof(settings));
@@ -51,7 +52,7 @@ public static class WhetstoneServer
         });
         // A page in the owner's browser could reach the port through DNS rebinding; only a known Host is accepted.
         builder.Services.AddHostFiltering(o => o.AllowedHosts = ["localhost", "127.0.0.1", .. hosts]);
-        AddTools(builder.Services, enhancer)
+        AddTools(builder.Services, enhancer, store)
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.StatefulForInitializeClients);
 
         var app = builder.Build();
@@ -68,7 +69,8 @@ public static class WhetstoneServer
             }
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
         });
-        app.MapGet("/health", () => Results.Json(new { status = "ok", version = Version }));
+        var memory = store ?? NullStore.Instance;
+        app.MapGet("/health", () => Results.Json(new { status = "ok", version = Version, store_failures = memory.Failures }));
         app.MapMcp("/v1/mcp");
         return app;
     }
@@ -77,17 +79,18 @@ public static class WhetstoneServer
     /// `whetstone mcp`: the same tools over stdio, one session, no listener and so no key. Protocol traffic owns
     /// <paramref name="output"/> (the process's stdout), so every log line goes to stderr.
     /// </summary>
-    public static IHost CreateStdio(IEnhancer enhancer, Stream input, Stream output)
+    public static IHost CreateStdio(IEnhancer enhancer, Stream input, Stream output, IStore? store = null)
     {
         var builder = Host.CreateEmptyApplicationBuilder(new());
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace).SetMinimumLevel(LogLevel.Warning);
-        AddTools(builder.Services, enhancer).WithStreamServerTransport(input, output);
+        AddTools(builder.Services, enhancer, store).WithStreamServerTransport(input, output);
         return builder.Build();
     }
 
-    private static IMcpServerBuilder AddTools(IServiceCollection services, IEnhancer enhancer)
+    private static IMcpServerBuilder AddTools(IServiceCollection services, IEnhancer enhancer, IStore? store)
     {
         services.AddSingleton(enhancer);
+        services.AddSingleton(store ?? NullStore.Instance);
         return services.AddMcpServer(o =>
             {
                 o.ServerInfo = new() { Name = "whetstone", Version = Version };

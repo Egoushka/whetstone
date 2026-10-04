@@ -3,8 +3,8 @@
 A prompt enhancer that learns from you. You write a prompt; whetstone returns a better one, built from your own past
 prompts that went well, and learns from what happened next.
 
-**Status: pass-through.** The MCP server answers `enhance` with your prompt unchanged and accepts `feedback`; nothing
-is learned or stored yet (goal 0.1 of [ROADMAP.md](ROADMAP.md)).
+**Status: pass-through that remembers.** The MCP server answers `enhance` with your prompt unchanged and stores each call,
+redacted, with its outcome; nothing is learned from it yet (goal 0.2 of [ROADMAP.md](ROADMAP.md)).
 
 ## Run it
 
@@ -12,6 +12,8 @@ is learned or stored yet (goal 0.1 of [ROADMAP.md](ROADMAP.md)).
 dotnet run --project src/Whetstone.Server -- mcp                              # MCP over stdio
 WHETSTONE_API_KEY=... dotnet run --project src/Whetstone.Server -- serve      # MCP over HTTP at 127.0.0.1:7340/v1/mcp
 ```
+
+Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures`. Exporting and deleting what is stored comes next ([docs/privacy.md](docs/privacy.md)).
 
 Over HTTP every MCP request needs `Authorization: Bearer <WHETSTONE_API_KEY>`; `GET /health` needs none.
 
