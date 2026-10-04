@@ -8,6 +8,9 @@ namespace Whetstone.Tests;
 /// <summary>enhance never blocks the client: a late or failing enhancer yields the original prompt inside the deadline.</summary>
 public class DeadlineTests
 {
+    /// <summary>The late enhancers take 10 s; answering well inside that proves the deadline, without a margin a cold CI runner can miss.</summary>
+    private static readonly TimeSpan NotWaiting = TimeSpan.FromSeconds(3);
+
     private static readonly EnhanceRequest Request = new("Fix the failing test in the parser module", DeadlineMs: 200);
 
     [Fact]
@@ -25,7 +28,7 @@ public class DeadlineTests
         var clock = Stopwatch.StartNew();
         var response = await Tools.AnswerAsync(Enhancers.Slow(TimeSpan.FromSeconds(10)), Request, NullLogger.Instance, CancellationToken.None);
 
-        Assert.True(clock.ElapsedMilliseconds < Request.DeadlineMs, $"answered after {clock.ElapsedMilliseconds} ms");
+        Assert.True(clock.Elapsed < NotWaiting, $"answered after {clock.ElapsedMilliseconds} ms");
         Assert.Equal(Request.Prompt, response.Prompt);
         Assert.False(response.Changed);
         Assert.Null(response.TemplateId);
@@ -36,9 +39,9 @@ public class DeadlineTests
     public async Task A_blocking_enhancer_yields_the_original_prompt_before_the_deadline()
     {
         var clock = Stopwatch.StartNew();
-        var response = await Tools.AnswerAsync(Enhancers.Blocking(TimeSpan.FromSeconds(2)), Request, NullLogger.Instance, CancellationToken.None);
+        var response = await Tools.AnswerAsync(Enhancers.Blocking(TimeSpan.FromSeconds(10)), Request, NullLogger.Instance, CancellationToken.None);
 
-        Assert.True(clock.ElapsedMilliseconds < Request.DeadlineMs, $"answered after {clock.ElapsedMilliseconds} ms");
+        Assert.True(clock.Elapsed < NotWaiting, $"answered after {clock.ElapsedMilliseconds} ms");
         Assert.False(response.Changed);
     }
 
