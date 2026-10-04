@@ -18,10 +18,12 @@ Nothing else: no file contents, no model answers, no other users' data.
 
 - **Redact before storage.** Secret-shaped text (keys, tokens, private keys, connection strings) is replaced with a
   marker before anything is written. A redaction miss is a `broken` bug.
-- **One store per user.** No query reads across stores.
-- **Export and delete.** `export` returns everything stored for the caller as JSON lines; `forget` deletes it, with an
-  optional filter (a repository, a date range). Deletion removes it from templates too: a template written from a
-  forgotten prompt is rebuilt or dropped.
+- **One store per user.** A file per user under the data directory (mode 0600, directory 0700); no query reads across
+  stores.
+- **Export and delete.** `whetstone export` writes everything stored for the user as JSON lines; `whetstone forget`
+  deletes it, with an optional filter (a repository, a date range), and only counts matches until `--confirm` is given.
+  They are commands, not MCP tools, so no agent can call them (ADR 0003). Deletion removes it from templates too: a
+  template written from a forgotten prompt is rebuilt or dropped.
 - **Outbound calls.** The only outbound call is to the rewriting model the user configures (goal 0.6), and only the
   redacted prompt and the chosen template are sent.
 - **This repository holds no real prompt.** Tests and examples use invented ones.

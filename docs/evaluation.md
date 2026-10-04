@@ -18,6 +18,10 @@ and says "not enough data" below 20 per side.
 
 ## Bar for each goal
 
+- 0.2 (remembers): the redaction corpus passes (every seeded secret shape redacted, every must-keep string kept) and a
+  replay of it through `enhance` leaves no seeded secret in the stored file; `export`, `forget --all --confirm`, `export`
+  leaves nothing; two user ids never share a file; a failing store changes no answer; after a week of the owner's use,
+  gitleaks over `export` finds nothing.
 - 0.3 (retrieval): acceptance at least 40% over 50 rewrites.
 - 0.5 (templates): a new template version replaces the old only if its score is no lower and cost no higher over at
   least 20 runs each.
