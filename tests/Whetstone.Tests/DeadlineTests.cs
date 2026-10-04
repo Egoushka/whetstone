@@ -16,7 +16,8 @@ public class DeadlineTests
     [Fact]
     public async Task An_answer_inside_the_deadline_is_returned()
     {
-        var response = await Tools.AnswerAsync(Enhancers.Rewriting(), Request, NullLogger.Instance, CancellationToken.None);
+        // A generous deadline: this checks the success path, and a cold, busy runner must not turn it into a timing test.
+        var response = await Tools.AnswerAsync(Enhancers.Rewriting(), Request with { DeadlineMs = 10_000 }, NullLogger.Instance, CancellationToken.None);
 
         Assert.True(response.Changed);
         Assert.Equal("tpl-test", response.TemplateId);

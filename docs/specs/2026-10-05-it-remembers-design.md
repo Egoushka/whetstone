@@ -26,7 +26,7 @@ unchanged; (5) a week of the owner's own use, then `export` scanned with gitleak
 | # | Question | Decision |
 |---|---|---|
 | 1 | Where export and forget live | Commands of the executable, not MCP tools: `forget` is irreversible and must not sit in an agent's tool list. The contract does not grow. |
-| 2 | Users | One key, one user (`WHETSTONE_USER`, default `owner`). The code reaches a store only through `IStores.For(user)`, the path carries the user id, and a test shows two ids never share a file. A key-to-user map comes when a second person exists. |
+| 2 | Users | One key, one user (`WHETSTONE_USER`, default `owner`). The code reaches a store only through `IStores.ForUser(user)`, the path carries the user id, and a test shows two ids never share a file. A key-to-user map comes when a second person exists. |
 | 3 | Redaction | Our own patterns and an entropy rule, with a corpus of invented examples that must and must not match. gitleaks audits exports. |
 | 4 | Store | SQLite, `<data dir>/<user>/whetstone.db`, directory 0700, file 0600, WAL off (one writer). One table `requests`, one row per `enhance`; `feedback` updates it. |
 | 5 | What a row holds | request id, time, the redacted prompt, the redacted context (repository, commit, task kind, client), `changed`, `template_id`, `template_version`, `held_out`, `truncated`, and the outcome fields from `feedback/v1` (null until it arrives). Not the answer text beyond what the fields above say: the rewrite is derived and rebuilt in 0.3. |
