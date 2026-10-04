@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Whetstone.Contracts;
+using Whetstone.Retrieval;
 using Whetstone.Storage;
 
 namespace Whetstone.Server;
@@ -37,6 +38,32 @@ public static class Commands
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
         {
             return Fail(error, "export", e);
+        }
+    }
+
+    public const string ReplayUsage = "usage: whetstone replay";
+
+    /// <summary>
+    /// Reads your store and prints, for each scored request, the earlier request that best matches it and the match's score, then how
+    /// many requests are eligible to be retrieved. Changes nothing and is not an answer to any client: it is how the owner picks a
+    /// threshold for retrieval (docs/specs/2026-10-05-it-retrieves-design.md).
+    /// </summary>
+    public static async Task<int> ReplayAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count > 0)
+            return Refuse(error, $"unknown option '{options[0]}'", ReplayUsage);
+        try
+        {
+            var rows = new List<ExportRecord>();
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                rows.Add(record);
+            var report = Replay.Run(rows);
+            await output.WriteAsync(ReplayText.Format(report));
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "replay", e);
         }
     }
 

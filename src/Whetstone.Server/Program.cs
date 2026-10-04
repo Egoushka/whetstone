@@ -10,6 +10,7 @@ const string Usage = """
                                             the bearer key is read from WHETSTONE_API_KEY
       export [--repository R] [--before DATE]
                                             everything stored for you, as JSON lines (export/v1) on stdout
+      replay                                for each scored request, the earlier one that best matches it (reads only)
       forget (--all | --repository R | --before DATE) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
     Every request is stored, redacted, in <WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db
@@ -42,6 +43,8 @@ switch (args)
     case ["export", .. var exportOptions]:
         // stdout is the data; the pipe closing early is the reader's choice, not an error.
         return await Commands.ExportAsync(exportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["replay", .. var replayOptions]:
+        return await Commands.ReplayAsync(replayOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["forget", .. var forgetOptions]:
         return await Commands.ForgetAsync(forgetOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["mcp"]:
