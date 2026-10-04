@@ -13,6 +13,25 @@ public class ContractTests
 
     public static TheoryData<string> FeedbackExamples() => Valid("feedback");
 
+    public static TheoryData<string> ExportExamples() => Valid("export");
+
+    [Theory]
+    [MemberData(nameof(ExportExamples))]
+    public void Export_example_round_trips(string file) =>
+        AssertRoundTrips<ExportRecord>(JsonNode.Parse(File.ReadAllText(file))!);
+
+    [Theory]
+    [MemberData(nameof(ExportExamples))]
+    public void Export_example_validates_against_the_embedded_schema(string file) =>
+        Assert.Empty(ContractSchemas.ValidateExport(JsonDocument.Parse(File.ReadAllText(file)).RootElement));
+
+    [Theory]
+    [InlineData("invalid-missing-prompt.json")]
+    [InlineData("invalid-score-out-of-range.json")]
+    [InlineData("invalid-unknown-field.json")]
+    public void Invalid_export_example_is_refused_by_the_embedded_schema(string name) =>
+        Assert.NotEmpty(ContractSchemas.ValidateExport(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "export", "v1", "examples", name))).RootElement));
+
     [Theory]
     [MemberData(nameof(EnhanceExamples))]
     public void Enhance_example_round_trips(string file)
