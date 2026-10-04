@@ -3,8 +3,8 @@
 A prompt enhancer that learns from you. You write a prompt; whetstone returns a better one, built from your own past
 prompts that went well, and learns from what happened next.
 
-**Status: not started.** This repository holds the vision, the roadmap, the first spec and the contract. There is no
-code yet.
+**Status: not usable yet.** This repository holds the vision, the roadmap, the first spec, the contract and its C#
+types. There is no server yet.
 
 ## How it works
 

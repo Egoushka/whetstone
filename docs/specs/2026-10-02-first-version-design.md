@@ -30,7 +30,7 @@ calls it in a test, shows no diff for a pass-through, and sends the original whe
 | # | Question | Decision |
 |---|---|---|
 | 1 | Transport | MCP over streamable HTTP, plus stdio for local use. Same tools on both. |
-| 2 | Stack | .NET 10 and the official MCP C# SDK, like chargehand, so its contract types and test helpers can be reused. Proposed in ADR 0002; reopen if the retrieval goal (0.3) needs a library that only exists in Python. |
+| 2 | Stack | .NET 10 and the official MCP C# SDK, like chargehand, so its contract types and test helpers can be reused. Accepted in ADR 0002; reopen if the retrieval goal (0.3) needs a library that only exists in Python. |
 | 3 | Never block | The contract carries a `deadline_ms` the client sets (default 1500). whetstone answers inside it or the client sends the original. A pass-through is a valid answer, not an error. |
 | 4 | Where history lives | whetstone keeps its own store (SQLite, one file per user) for prompts, outcomes and templates. Memory services are an import source (goal 0.7), not the store: they hold sessions, not the prompt-outcome pairs whetstone needs, and outcomes must join to template versions. |
 | 5 | Untrusted output | A rewrite is text the client shows and the user accepts. The contract has no field for tool calls, system prompts or model choice; `task_kind` is a hint. A client must treat the rewrite as user input, never as instructions to itself. |
