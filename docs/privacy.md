@@ -18,6 +18,12 @@ Nothing else: no file contents, no model answers, no other users' data.
 
 - **Redact before storage.** Secret-shaped text (keys, tokens, private keys, connection strings) is replaced with a
   marker before anything is written. A redaction miss is a `broken` bug.
+  What is redacted: private-key blocks, vendor and cloud tokens, JWTs, authorization and cookie headers, passwords in URLs
+  and connection strings, `name = value` where the name says credential, and long mixed high-entropy strings. Kept on
+  purpose: git shas (40 and 64 hex), UUIDs, paths, identifiers, placeholders such as `$TOKEN` or `{{password}}`, and
+  names, emails and repository names. Known limits: an unlabelled 40- or 64-character hex secret reads as a git sha and is
+  kept; a secret written in words is not a pattern. The corpus (`tests/Whetstone.Tests/Redaction/Corpus.cs`) is the list
+  of shapes covered; add a shape there before fixing a miss.
 - **One store per user.** A file per user under the data directory (mode 0600, directory 0700); no query reads across
   stores.
 - **Export and delete.** `whetstone export` writes everything stored for the user as JSON lines; `whetstone forget`

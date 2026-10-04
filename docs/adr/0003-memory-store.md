@@ -1,6 +1,6 @@
 # 0003. The memory store: SQLite per user, redact first, export and forget from the command line
 
-- Status: proposed
+- Status: accepted (2026-10-05)
 - Date: 2026-10-05
 
 ## Context
