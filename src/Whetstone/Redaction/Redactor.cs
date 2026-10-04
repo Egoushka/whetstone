@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Whetstone.Redaction;
@@ -74,12 +75,6 @@ public static partial class Redactor
         Options | RegexOptions.IgnoreCase)]
     private static partial Regex Assignment();
 
-    [GeneratedRegex(@"[A-Za-z0-9+/_=-]{32,}", Options)]
-    private static partial Regex LongString();
-
-    [GeneratedRegex(@"\A[0-9a-fA-F]+\z", Options)]
-    private static partial Regex Hex();
-
     [GeneratedRegex(@"\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z", Options)]
     private static partial Regex Uuid();
 
@@ -108,8 +103,39 @@ public static partial class Redactor
         foreach (var vendor in VendorTokens)
             text = vendor.Replace(text, _ => Mark(Token));
         text = Assignment().Replace(text, m => AssignmentValue(m, Mark));
-        text = LongString().Replace(text, m => LooksLikeSecret(m.Value) ? Mark(HighEntropy) : m.Value);
+        text = ReplaceLongStrings(text, () => Mark(HighEntropy));
         return new Redacted(text, kinds);
+    }
+
+    private static bool IsStringChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '+' or '/' or '_' or '=' or '-';
+
+    /// <summary>
+    /// Runs of 32 or more base64-ish characters that look like a secret. A scanner, not a regex: a counted quantifier over a
+    /// character class costs several microseconds per character of one long word, and this must stay linear and fast on a
+    /// pasted megabyte.
+    /// </summary>
+    private static string ReplaceLongStrings(string text, Func<string> mark)
+    {
+        StringBuilder? result = null;
+        var copied = 0;
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (!IsStringChar(text[i]))
+            {
+                i++;
+                continue;
+            }
+            var start = i;
+            while (i < text.Length && IsStringChar(text[i]))
+                i++;
+            if (i - start <= LongestKept || !LooksLikeSecret(text.AsSpan(start, i - start)))
+                continue;
+            result ??= new StringBuilder(text.Length);
+            result.Append(text, copied, start - copied).Append(mark());
+            copied = i;
+        }
+        return result is null ? text : result.Append(text, copied, text.Length - copied).ToString();
     }
 
     private static string AssignmentValue(Match m, Func<string, string> mark)
@@ -138,25 +164,34 @@ public static partial class Redactor
     /// <summary>Not a plain lowercase word: has a digit, a capital or a symbol, or is long.</summary>
     private static bool LooksLikeValue(string value) => value.Length >= 16 || value.Any(c => !char.IsAsciiLetterLower(c));
 
-    private static bool LooksLikeSecret(string candidate)
+    private static bool LooksLikeSecret(ReadOnlySpan<char> candidate)
     {
-        if (Uuid().IsMatch(candidate))
+        // The UUID pattern has dashes at fixed places; it is 36 characters, so the length check above lets it through to here.
+        if (candidate.Length == 36 && Uuid().IsMatch(candidate))
             return false;
-        if (Hex().IsMatch(candidate))
+        bool lower = false, upper = false, digit = false, symbol = false, slash = false, hex = true;
+        foreach (var c in candidate)
+        {
+            lower |= char.IsAsciiLetterLower(c);
+            upper |= char.IsAsciiLetterUpper(c);
+            digit |= char.IsAsciiDigit(c);
+            symbol |= !char.IsAsciiLetterOrDigit(c);
+            slash |= c == '/';
+            hex &= char.IsAsciiHexDigit(c);
+        }
+        if (hex)
             // A git sha (SHA-1 or SHA-256 object name) is not a secret; any other long hex run is taken for one.
             return candidate.Length is not (40 or 64) && Entropy(candidate) >= HexEntropy;
-        var classes = (candidate.Any(char.IsAsciiLetterLower) ? 1 : 0) + (candidate.Any(char.IsAsciiLetterUpper) ? 1 : 0)
-            + (candidate.Any(char.IsAsciiDigit) ? 1 : 0) + (candidate.Any(c => !char.IsAsciiLetterOrDigit(c)) ? 1 : 0);
-        if (classes < 3 || candidate.Length <= LongestKept)
+        if ((lower ? 1 : 0) + (upper ? 1 : 0) + (digit ? 1 : 0) + (symbol ? 1 : 0) < 3)
             return false;
         // A path (src/Core/Contracts/Schemas) has no digit in any segment; a base64 secret has one almost always.
-        if (candidate.Contains('/') && !candidate.Any(char.IsAsciiDigit))
+        if (slash && !digit)
             return false;
         return Entropy(candidate) >= MixedEntropy;
     }
 
     /// <summary>Shannon entropy of the characters, in bits per character.</summary>
-    internal static double Entropy(string value)
+    internal static double Entropy(ReadOnlySpan<char> value)
     {
         var counts = new Dictionary<char, int>();
         foreach (var c in value)

@@ -125,10 +125,11 @@ public class RedactorTests
         var clock = Stopwatch.StartNew();
 
         _ = Redactor.Redact(new string('a', 2_000_000));
+        _ = Redactor.Redact(string.Concat(Enumerable.Repeat("aB3dE5+/", 250_000)));
         _ = Redactor.Redact(string.Concat(Enumerable.Repeat("-----BEGIN PRIVATE KEY----- ", 50_000)));
         _ = Redactor.Redact(string.Concat(Enumerable.Repeat("token=", 200_000)));
 
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(20), $"took {clock.Elapsed}");
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"took {clock.Elapsed}");
     }
 
     [Fact]
