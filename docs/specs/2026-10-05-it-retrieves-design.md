@@ -16,8 +16,9 @@ answers whose `feedback` says the user sent the rewrite.
 
 1. **Store:** one SQLite file per user, one row per `enhance`, outcome fields filled by `feedback` (0.2). Prompts are redacted
    before storage.
-2. **Answer:** `EnhanceResponse` carries `Prompt`, `Changed`, `Reason`, `TemplateId`, `TemplateVersion`, `HeldOut`. No new
-   field is needed to say "this was retrieved"; `Reason` and `TemplateId` already exist.
+2. **Answer:** `EnhanceResponse` carries `Prompt`, `Changed`, `Reason`, `TemplateId`, `TemplateVersion`, `HeldOut`. `Reason` says
+   "this was retrieved"; the one addition is an optional `source_request_id` (left out of a pass-through), so the stored row can
+   record which request the answer drew on (decision 6).
 3. **Gap:** the week of use that closes 0.2 yields few rows, and only rows with a `score` can count as "went well". Whether
    there are enough of them is not known yet; task 1 measures it before anything else is built.
 4. **No baseline yet:** the held-out share starts in 0.4. Until then acceptance is the only signal, and the evaluation page
@@ -34,7 +35,7 @@ answers whose `feedback` says the user sent the rewrite.
 | 5 | Cross-repository matches | Allowed, because the store is one user's. The block names the repository so a reader can see it came from elsewhere. |
 | 6 | Traceability | A nullable `source_request_id` column on `requests` records which row was retrieved. The `export/v1` schema gains an optional field (additive within the major). |
 | 7 | Self-match | A request never retrieves itself, and a prompt that is identical to the new one is not retrieved: it adds nothing. |
-| 8 | Never block | Retrieval runs inside the request's budget. Any failure, or running out of time, returns the pass-through and counts in `/health` as `retrieval_failures`. |
+| 8 | Never block | Retrieval runs inside the request's budget. Any failure, or running out of time, returns the pass-through and counts in `/health` as `retrieval_failures`. Off unless `WHETSTONE_RETRIEVAL=on`, which also needs `WHETSTONE_RETRIEVAL_MIN_SCORE` (BM25 grows with query length and falls with a small store, so it is read off `whetstone replay`, never defaulted). |
 | 9 | Order of redaction | Retrieved text comes from storage, so it was redacted at write time. The new prompt is redacted again before it is matched, so a secret in it never reaches a query that is logged. |
 
 ## What can go wrong

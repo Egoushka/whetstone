@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
+using Whetstone.Retrieval;
 using Whetstone.Storage;
 
 namespace Whetstone.Server;
@@ -83,6 +84,7 @@ public static class WhetstoneServer
                 status = "ok",
                 version = Version,
                 store_failures = memory.Failures,
+                retrieval_failures = (enhancer as Retriever)?.Failures ?? 0,
                 uptime_seconds = (long)(DateTime.Now - process.StartTime).TotalSeconds,
                 cpu_seconds = (long)process.TotalProcessorTime.TotalSeconds,
                 threads = process.Threads.Count,

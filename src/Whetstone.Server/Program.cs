@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using Whetstone;
+using Whetstone.Retrieval;
 using Whetstone.Server;
 using Whetstone.Storage;
 
@@ -24,8 +26,6 @@ Console.CancelKeyPress += (_, e) =>
     e.Cancel = true;
     cts.Cancel();
 };
-var enhancer = new PassThrough();
-
 var user = Environment.GetEnvironmentVariable("WHETSTONE_USER") is { Length: > 0 } named ? named : SqliteStores.DefaultUser;
 if (!SqliteStores.ValidUser(user))
 {
@@ -36,6 +36,17 @@ var dataDirectory = Environment.GetEnvironmentVariable("WHETSTONE_DATA_DIR") is 
     ? dir
     : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "whetstone");
 using var stores = new SqliteStores(dataDirectory);
+IEnhancer enhancer = new PassThrough();
+if (Environment.GetEnvironmentVariable("WHETSTONE_RETRIEVAL") is "on")
+{
+    // The bar is read off `whetstone replay`: there is no default that means anything for every prompt length.
+    if (!double.TryParse(Environment.GetEnvironmentVariable("WHETSTONE_RETRIEVAL_MIN_SCORE"), CultureInfo.InvariantCulture, out var minRelevance) || minRelevance <= 0)
+    {
+        Console.Error.WriteLine("whetstone: WHETSTONE_RETRIEVAL=on needs WHETSTONE_RETRIEVAL_MIN_SCORE, a number above 0 (see `whetstone replay`)");
+        return 2;
+    }
+    enhancer = new Retriever(enhancer, stores.IndexFor(user), new RetrievalOptions(minRelevance));
+}
 // The reason is an exception type: a message may quote a prompt.
 var store = new GuardedStore(stores.ForUser(user), reason => Console.Error.WriteLine($"whetstone: could not store a request ({reason})"));
 

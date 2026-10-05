@@ -42,7 +42,8 @@
         "reason": { "type": "string" },
         "task_kind": { "type": ["string", "null"] },
         "request_id": { "type": "string", "minLength": 1 },
-        "held_out": { "type": "boolean" }
+        "held_out": { "type": "boolean" },
+        "source_request_id": { "type": "string", "minLength": 1, "description": "The stored request a retrieval drew on; left out when there was none." }
       }
     }
   }

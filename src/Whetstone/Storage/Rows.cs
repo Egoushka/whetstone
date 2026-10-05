@@ -69,6 +69,7 @@ public sealed record RequestRow
             TemplateVersion = Clean(response.TemplateVersion),
             HeldOut = response.HeldOut,
             Truncated = truncated,
+            SourceRequestId = response.SourceRequestId,
         };
     }
 

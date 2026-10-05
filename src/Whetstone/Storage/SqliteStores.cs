@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using Whetstone.Retrieval;
 
 namespace Whetstone.Storage;
 
@@ -32,6 +33,9 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
     /// <summary>The commands' view of a user's store (ADR 0003). Reaches only that user's file, and never creates it.</summary>
     public IStoreAdmin AdminFor(string user) => new SqliteStoreAdmin(PathFor(user));
 
+    /// <summary>What the retriever may read of a user's store (goal 0.3); the same file as <see cref="ForUser"/>.</summary>
+    public IRetrievalIndex IndexFor(string user) => (SqliteStore)ForUser(user);
+
     public IStore ForUser(string user)
     {
         var path = PathFor(user);
@@ -55,7 +59,7 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
 }
 
 /// <summary>A user's file, opened per call: one writer at a time, no connection held between requests.</summary>
-internal sealed class SqliteStore(string path) : IStore, IDisposable
+internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDisposable
 {
     private const int BusyMilliseconds = 200;
 
@@ -111,10 +115,40 @@ internal sealed class SqliteStore(string path) : IStore, IDisposable
         return await command.ExecuteNonQueryAsync(ct);
     }, ct) > 0;
 
+    public async Task<IReadOnlyList<(string? TaskKind, double Score)>> ScoresAsync(CancellationToken ct) => await UseAsync<IReadOnlyList<(string?, double)>>(async connection =>
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT task_kind, score FROM requests WHERE score IS NOT NULL";
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var scores = new List<(string?, double)>();
+        while (await reader.ReadAsync(ct))
+            scores.Add((reader.IsDBNull(0) ? null : reader.GetString(0), reader.GetDouble(1)));
+        return scores;
+    }, ct);
+
+    public async Task<IReadOnlyList<Candidate>> SearchAsync(IReadOnlyList<string> terms, int limit, CancellationToken ct) => await UseAsync<IReadOnlyList<Candidate>>(async connection =>
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT r.request_id, r.created_at, r.prompt, r.repository, r.task_kind, r.score, -bm25(requests_fts)
+            FROM requests_fts JOIN requests r ON r.rowid = requests_fts.rowid
+            WHERE requests_fts MATCH $match AND r.score IS NOT NULL AND (r.model_overridden IS NULL OR r.model_overridden = 0)
+            ORDER BY bm25(requests_fts) LIMIT $limit
+            """;
+        command.Parameters.AddWithValue("$match", Words.MatchAny(terms));
+        command.Parameters.AddWithValue("$limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var found = new List<Candidate>();
+        while (await reader.ReadAsync(ct))
+            found.Add(new Candidate(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetDouble(5), reader.GetDouble(6)));
+        return found;
+    }, ct);
+
     private static string Text(DateTimeOffset at) => at.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 
     /// <summary>Runs <paramref name="work"/> on an open connection, alone: the file has one writer at a time.</summary>
-    private async Task<int> UseAsync(Func<SqliteConnection, Task<int>> work, CancellationToken ct)
+    private async Task<T> UseAsync<T>(Func<SqliteConnection, Task<T>> work, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try

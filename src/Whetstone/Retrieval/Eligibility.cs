@@ -14,22 +14,46 @@ public static class Eligibility
     public static IReadOnlyList<ExportRecord> Eligible(IReadOnlyList<ExportRecord> rows)
     {
         var scored = rows.Where(r => r.Outcome?.Score is not null).ToList();
-        if (scored.Count == 0)
-            return [];
-        var overall = Median(scored);
-        var byKind = scored
-            .GroupBy(r => r.Context.TaskKind ?? "", StringComparer.Ordinal)
-            .Where(g => g.Count() >= MinScoredForKind)
-            .ToDictionary(g => g.Key, Median, StringComparer.Ordinal);
+        var bar = Thresholds.From(scored.Select(r => (r.Context.TaskKind, r.Outcome!.Score!.Value)));
         return scored
             .Where(r => r.Outcome!.ModelOverridden != true)
-            .Where(r => r.Outcome!.Score >= byKind.GetValueOrDefault(r.Context.TaskKind ?? "", overall))
+            .Where(r => bar.Passes(r.Context.TaskKind, r.Outcome!.Score!.Value))
             .ToList();
     }
+}
 
-    private static double Median(IEnumerable<ExportRecord> scored)
+/// <summary>The score a request must reach to count as having gone well, per task kind.</summary>
+public sealed class Thresholds
+{
+    private readonly double _overall;
+    private readonly Dictionary<string, double> _byKind;
+
+    private Thresholds(double overall, Dictionary<string, double> byKind)
     {
-        var sorted = scored.Select(r => r.Outcome!.Score!.Value).Order().ToArray();
+        _overall = overall;
+        _byKind = byKind;
+    }
+
+    /// <summary>No scored request at all: nothing passes.</summary>
+    public bool Empty => double.IsNaN(_overall);
+
+    public static Thresholds From(IEnumerable<(string? TaskKind, double Score)> scored)
+    {
+        var all = scored.ToList();
+        if (all.Count == 0)
+            return new Thresholds(double.NaN, []);
+        var byKind = all
+            .GroupBy(r => r.TaskKind ?? "", StringComparer.Ordinal)
+            .Where(g => g.Count() >= Eligibility.MinScoredForKind)
+            .ToDictionary(g => g.Key, g => Median(g.Select(r => r.Score)), StringComparer.Ordinal);
+        return new Thresholds(Median(all.Select(r => r.Score)), byKind);
+    }
+
+    public bool Passes(string? taskKind, double score) => !Empty && score >= _byKind.GetValueOrDefault(taskKind ?? "", _overall);
+
+    private static double Median(IEnumerable<double> scores)
+    {
+        var sorted = scores.Order().ToArray();
         var middle = sorted.Length / 2;
         return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
     }
