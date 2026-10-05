@@ -18,7 +18,10 @@ public sealed record EnhanceContext(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TaskKind = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Client = null);
 
-/// <summary>The <c>enhance</c> response. A pass-through (<see cref="Changed"/> false) is a valid answer, not an error.</summary>
+/// <summary>
+/// The <c>enhance</c> response. A pass-through (<see cref="Changed"/> false) is a valid answer, not an error.
+/// <paramref name="SourceRequestId"/> names the stored request a retrieval drew on; left out when there was none.
+/// </summary>
 public sealed record EnhanceResponse(
     string Prompt,
     bool Changed,
@@ -27,4 +30,5 @@ public sealed record EnhanceResponse(
     string Reason,
     string? TaskKind,
     string RequestId,
-    bool HeldOut);
+    bool HeldOut,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRequestId = null);

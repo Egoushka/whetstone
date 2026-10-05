@@ -27,6 +27,8 @@ Nothing else: no file contents, no model answers, no other users' data.
   kept; a secret written in words is not a pattern. The corpus (`tests/Whetstone.Tests/Redaction/Corpus.cs`) is the list
   of shapes covered; add a shape there before fixing a miss.
   `scripts/audit-export.sh` runs gitleaks over an export as a second opinion; a finding is a redaction miss.
+- **Retrieval stays inside one store.** When retrieval is on, `enhance` may quote an earlier prompt of the same user back to
+  them; it is read from that user's file only and was redacted when stored.
 - **One store per user.** A file per user under the data directory (mode 0600, directory 0700); no query reads across
   stores.
 - **Export and delete.** `whetstone export` writes everything stored for the user as JSON lines; `whetstone forget`

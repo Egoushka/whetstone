@@ -13,7 +13,7 @@ dotnet run --project src/Whetstone.Server -- mcp                              # 
 WHETSTONE_API_KEY=... dotnet run --project src/Whetstone.Server -- serve      # MCP over HTTP at 127.0.0.1:7340/v1/mcp
 ```
 
-Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures` and the process's uptime, CPU seconds, threads and memory. Take it out or delete it from a terminal ([docs/privacy.md](docs/privacy.md)):
+Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures`, `retrieval_failures` and the process's uptime, CPU seconds, threads and memory. Take it out or delete it from a terminal ([docs/privacy.md](docs/privacy.md)):
 
 ```bash
 dotnet run --project src/Whetstone.Server -- export > mine.jsonl                       # everything, as JSON lines
@@ -22,6 +22,8 @@ dotnet run --project src/Whetstone.Server -- forget --repository example/app    
 dotnet run --project src/Whetstone.Server -- forget --repository example/app --confirm # deletes
 dotnet run --project src/Whetstone.Server -- reindex                                    # upgrade an older store file, rebuild its search index
 ```
+
+Retrieval is off. `WHETSTONE_RETRIEVAL=on` with `WHETSTONE_RETRIEVAL_MIN_SCORE=<n>` (read it off `whetstone replay`) makes `enhance` append the closest earlier prompt of yours that was scored well, quoted after your prompt; no match, no scored prompt or any failure gives your prompt back unchanged.
 
 Over HTTP every MCP request needs `Authorization: Bearer <WHETSTONE_API_KEY>`; `GET /health` needs none.
 

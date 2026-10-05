@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Whetstone.Contracts;
 
@@ -14,10 +13,8 @@ public sealed record ReplayReport(int Total, int Scored, int Eligible, IReadOnly
 /// For every scored request, the eligible request that ranks first for it by BM25 (SQLite FTS5), so the owner can read real
 /// pairs and choose a threshold. Works on an in-memory copy: the store's file is not touched.
 /// </summary>
-public static partial class Replay
+public static class Replay
 {
-    private const int MaxTerms = 64;
-
     public static ReplayReport Run(IReadOnlyList<ExportRecord> rows)
     {
         var scored = rows.Where(r => r.Outcome?.Score is not null).ToList();
@@ -35,7 +32,7 @@ public static partial class Replay
         {
             using var insert = connection.CreateCommand();
             insert.CommandText = "INSERT INTO docs (prompt, request_id) VALUES ($prompt, $id)";
-            insert.Parameters.AddWithValue("$prompt", Words(row.Prompt));
+            insert.Parameters.AddWithValue("$prompt", Words.Normalise(row.Prompt));
             insert.Parameters.AddWithValue("$id", row.RequestId);
             insert.ExecuteNonQuery();
         }
@@ -46,7 +43,7 @@ public static partial class Replay
 
     private static ReplayPair Best(SqliteConnection connection, ExportRecord query, Dictionary<string, ExportRecord> byId)
     {
-        var terms = Terms(query.Prompt);
+        var terms = Words.Terms(query.Prompt);
         if (terms.Length == 0)
             return new ReplayPair(query, null, 0);
         using var command = connection.CreateCommand();
@@ -56,21 +53,10 @@ public static partial class Replay
             WHERE docs MATCH $match AND request_id <> $id AND prompt <> $words
             ORDER BY bm25(docs) LIMIT 1
             """;
-        command.Parameters.AddWithValue("$match", string.Join(" OR ", terms.Select(t => $"\"{t}\"")));
+        command.Parameters.AddWithValue("$match", Words.MatchAny(terms));
         command.Parameters.AddWithValue("$id", query.RequestId);
-        command.Parameters.AddWithValue("$words", Words(query.Prompt));
+        command.Parameters.AddWithValue("$words", Words.Normalise(query.Prompt));
         using var reader = command.ExecuteReader();
         return reader.Read() ? new ReplayPair(query, byId[reader.GetString(0)], reader.GetDouble(1)) : new ReplayPair(query, null, 0);
     }
-
-    /// <summary>The prompt as the words the index sees: lower case, redaction markers removed so they never match each other.</summary>
-    private static string Words(string prompt) => string.Join(' ', WordPattern().Matches(Marker().Replace(prompt, " ")).Select(m => m.Value.ToLowerInvariant()));
-
-    private static string[] Terms(string prompt) => [.. Words(prompt).Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 3).Distinct(StringComparer.Ordinal).Take(MaxTerms)];
-
-    [GeneratedRegex(@"\[REDACTED:[a-z-]+\]")]
-    private static partial Regex Marker();
-
-    [GeneratedRegex(@"[\p{L}\p{Nd}]+")]
-    private static partial Regex WordPattern();
 }

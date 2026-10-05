@@ -1,0 +1,19 @@
+{
+  "request": {
+    "prompt": "add retry to the upload client",
+    "context": {
+      "repository": "example/app"
+    }
+  },
+  "response": {
+    "prompt": "add retry to the upload client\n\n---\nA similar earlier prompt that went well (example/app, 2026-10-02):\n> the upload client needs retry and backoff",
+    "changed": true,
+    "template_id": null,
+    "template_version": null,
+    "reason": "retrieval: similar earlier prompt that went well",
+    "task_kind": null,
+    "request_id": "req-0010",
+    "held_out": false,
+    "source_request_id": "req-0003"
+  }
+}
