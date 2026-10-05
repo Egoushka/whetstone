@@ -57,7 +57,6 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
 /// <summary>A user's file, opened per call: one writer at a time, no connection held between requests.</summary>
 internal sealed class SqliteStore(string path) : IStore, IDisposable
 {
-    private const int SchemaVersion = 1;
     private const int BusyMilliseconds = 200;
 
     private static readonly UnixFileMode OwnerDirectory = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
@@ -75,8 +74,8 @@ internal sealed class SqliteStore(string path) : IStore, IDisposable
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT OR REPLACE INTO requests
-              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated)
-            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut)
+              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id)
+            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source)
             """;
         command.Parameters.AddWithValue("$id", row.RequestId);
         command.Parameters.AddWithValue("$at", Text(row.CreatedAt));
@@ -90,6 +89,7 @@ internal sealed class SqliteStore(string path) : IStore, IDisposable
         command.Parameters.AddWithValue("$tversion", (object?)row.TemplateVersion ?? DBNull.Value);
         command.Parameters.AddWithValue("$held", row.HeldOut ? 1 : 0);
         command.Parameters.AddWithValue("$cut", row.Truncated ? 1 : 0);
+        command.Parameters.AddWithValue("$source", (object?)row.SourceRequestId ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct);
 
@@ -125,12 +125,12 @@ internal sealed class SqliteStore(string path) : IStore, IDisposable
             await connection.OpenAsync(ct);
             await using (var busy = connection.CreateCommand())
             {
-                busy.CommandText = $"PRAGMA busy_timeout = {BusyMilliseconds}";
+                busy.CommandText = $"PRAGMA busy_timeout = {BusyMilliseconds}; {StoreSchema.Pragmas}";
                 await busy.ExecuteNonQueryAsync(ct);
             }
             if (!_ready)
             {
-                await EnsureSchemaAsync(connection, ct);
+                await StoreSchema.EnsureAsync(connection, ct);
                 _ready = true;
             }
             return await work(connection);
@@ -156,40 +156,5 @@ internal sealed class SqliteStore(string path) : IStore, IDisposable
         if (!OperatingSystem.IsWindows())
             options.UnixCreateMode = OwnerFile;
         using var created = new FileStream(path, options);
-    }
-
-    private static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken ct)
-    {
-        await using var version = connection.CreateCommand();
-        version.CommandText = "PRAGMA user_version";
-        var found = Convert.ToInt32(await version.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
-        if (found > SchemaVersion)
-            throw new InvalidOperationException($"the store is schema version {found}; this whetstone knows {SchemaVersion}");
-        await using var create = connection.CreateCommand();
-        create.CommandText = $"""
-            CREATE TABLE IF NOT EXISTS requests (
-              request_id TEXT PRIMARY KEY,
-              created_at TEXT NOT NULL,
-              prompt TEXT NOT NULL,
-              repository TEXT,
-              commit_sha TEXT,
-              task_kind TEXT,
-              client TEXT,
-              changed INTEGER NOT NULL,
-              template_id TEXT,
-              template_version TEXT,
-              held_out INTEGER NOT NULL,
-              truncated INTEGER NOT NULL,
-              rewrite_accepted INTEGER,
-              model_overridden INTEGER,
-              score REAL,
-              cost_usd REAL,
-              model TEXT,
-              feedback_at TEXT
-            );
-            CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
-            PRAGMA user_version = {SchemaVersion};
-            """;
-        await create.ExecuteNonQueryAsync(ct);
     }
 }

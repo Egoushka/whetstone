@@ -8,7 +8,6 @@ namespace Whetstone.Storage;
 /// <summary>Reads, counts and deletes in a user's existing file. The server may be writing to it: waits are bounded, not skipped.</summary>
 internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
 {
-    private const int SchemaVersion = 1;
     private const int BusyMilliseconds = 5_000;
 
     private const string Where = "WHERE ($repository IS NULL OR repository = $repository) AND ($before IS NULL OR created_at < $before)";
@@ -17,7 +16,8 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     {
         if (!File.Exists(path))
             return 0;
-        await using var connection = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        var (connection, _) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM requests {Where}";
         Bind(command, filter);
@@ -28,11 +28,13 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     {
         if (!File.Exists(path))
             yield break;
-        await using var connection = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
         await using var command = connection.CreateCommand();
+        // A version 1 file has no source column yet; the server adds it the next time it opens the file.
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
-                   rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at
+                   rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -43,7 +45,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             yield return new ExportRecord(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3) != 0,
                 new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7)),
-                new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0),
+                new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18)),
                 reported is null
                     ? null
                     : new ExportOutcome(Flag(reader, 12), Flag(reader, 13), Number(reader, 14), Number(reader, 15), Text(reader, 16), reported));
@@ -54,7 +56,8 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     {
         if (!File.Exists(path))
             return 0;
-        await using var connection = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
         // Deleted text is overwritten with zeros, the rebuild below drops the pages, and nothing goes to a temp file.
         foreach (var pragma in new[] { "PRAGMA secure_delete = ON", "PRAGMA temp_store = MEMORY" })
         {
@@ -71,6 +74,13 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         }
         if (deleted > 0)
         {
+            // The index kept the deleted words until it is rebuilt from what is left; do that before the pages are rewritten.
+            if (version >= 2)
+            {
+                await using var rebuild = connection.CreateCommand();
+                rebuild.CommandText = StoreSchema.RebuildIndex;
+                await rebuild.ExecuteNonQueryAsync(ct);
+            }
             await using var vacuum = connection.CreateCommand();
             vacuum.CommandText = "VACUUM";
             await vacuum.ExecuteNonQueryAsync(ct);
@@ -78,7 +88,21 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return deleted;
     }
 
-    private async Task<SqliteConnection> OpenAsync(SqliteOpenMode mode, CancellationToken ct)
+    public async Task<int> ReindexAsync(CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return 0;
+        var (connection, _) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        // Upgrades a version 1 file first, then rebuilds the index from the rows.
+        await StoreSchema.EnsureAsync(connection, ct);
+        await using var rebuild = connection.CreateCommand();
+        rebuild.CommandText = StoreSchema.RebuildIndex;
+        await rebuild.ExecuteNonQueryAsync(ct);
+        return await CountAsync(RowFilter.Everything, ct);
+    }
+
+    private async Task<(SqliteConnection Connection, int Version)> OpenAsync(SqliteOpenMode mode, CancellationToken ct)
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Mode = mode, Pooling = false }.ToString());
         try
@@ -87,12 +111,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await using var busy = connection.CreateCommand();
             busy.CommandText = $"PRAGMA busy_timeout = {BusyMilliseconds}";
             await busy.ExecuteNonQueryAsync(ct);
-            await using var version = connection.CreateCommand();
-            version.CommandText = "PRAGMA user_version";
-            var found = Convert.ToInt32(await version.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
-            if (found != SchemaVersion)
-                throw new InvalidOperationException($"the store is schema version {found}; this whetstone reads {SchemaVersion}");
-            return connection;
+            var found = await StoreSchema.VersionAsync(connection, ct);
+            if (found < StoreSchema.OldestReadable || found > StoreSchema.Version)
+                throw new InvalidOperationException($"the store is schema version {found}; this whetstone reads {StoreSchema.OldestReadable} to {StoreSchema.Version}");
+            return (connection, found);
         }
         catch
         {

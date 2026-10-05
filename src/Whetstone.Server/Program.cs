@@ -11,6 +11,7 @@ const string Usage = """
       export [--repository R] [--before DATE]
                                             everything stored for you, as JSON lines (export/v1) on stdout
       replay                                for each scored request, the earlier one that best matches it (reads only)
+      reindex                               upgrade an older store file and rebuild its search index
       forget (--all | --repository R | --before DATE) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
     Every request is stored, redacted, in <WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db
@@ -45,6 +46,8 @@ switch (args)
         return await Commands.ExportAsync(exportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["replay", .. var replayOptions]:
         return await Commands.ReplayAsync(replayOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["reindex", .. var reindexOptions]:
+        return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["forget", .. var forgetOptions]:
         return await Commands.ForgetAsync(forgetOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["mcp"]:
