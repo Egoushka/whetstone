@@ -109,7 +109,11 @@ public sealed class HttpServerTests : IAsyncDisposable
 
         Assert.Equal(HttpStatusCode.Unauthorized, mcp.StatusCode);
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
-        Assert.Equal("ok", JsonDocument.Parse(await health.Content.ReadAsStringAsync()).RootElement.GetProperty("status").GetString());
+        var body = JsonDocument.Parse(await health.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("ok", body.GetProperty("status").GetString());
+        foreach (var number in new[] { "uptime_seconds", "cpu_seconds", "threads", "heap_mb", "committed_mb", "gen2_collections" })
+            Assert.True(body.GetProperty(number).GetInt64() >= 0, number);
+        Assert.True(body.GetProperty("threads").GetInt64() > 0);
     }
 
     [Fact]

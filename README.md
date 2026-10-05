@@ -13,7 +13,7 @@ dotnet run --project src/Whetstone.Server -- mcp                              # 
 WHETSTONE_API_KEY=... dotnet run --project src/Whetstone.Server -- serve      # MCP over HTTP at 127.0.0.1:7340/v1/mcp
 ```
 
-Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures`. Take it out or delete it from a terminal ([docs/privacy.md](docs/privacy.md)):
+Every `enhance` is stored, with secrets redacted first, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (your user data directory and the user `owner` by default); `feedback` adds the outcome. `GET /health` reports `store_failures` and the process's uptime, CPU seconds, threads and memory. Take it out or delete it from a terminal ([docs/privacy.md](docs/privacy.md)):
 
 ```bash
 dotnet run --project src/Whetstone.Server -- export > mine.jsonl                       # everything, as JSON lines
