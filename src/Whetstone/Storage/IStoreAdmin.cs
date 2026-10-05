@@ -28,6 +28,9 @@ public interface IStoreAdmin
 
     IAsyncEnumerable<ExportRecord> ExportAsync(RowFilter filter, CancellationToken ct);
 
+    /// <summary>Upgrades an older file and rebuilds the search index from the stored rows. Returns how many rows it covers.</summary>
+    Task<int> ReindexAsync(CancellationToken ct);
+
     /// <summary>Deletes the matching rows and rewrites the file so their text is not left in it. Returns how many went.</summary>
     Task<int> ForgetAsync(RowFilter filter, CancellationToken ct);
 }

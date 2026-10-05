@@ -41,6 +41,25 @@ public static class Commands
         }
     }
 
+    public const string ReindexUsage = "usage: whetstone reindex";
+
+    /// <summary>Upgrades the store file if it is an older version and rebuilds its search index from the stored requests.</summary>
+    public static async Task<int> ReindexAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count > 0)
+            return Refuse(error, $"unknown option '{options[0]}'", ReindexUsage);
+        try
+        {
+            var covered = await admin.ReindexAsync(ct);
+            await output.WriteAsync($"Indexed {covered} {Noun(covered)}.\n");
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "reindex", e);
+        }
+    }
+
     public const string ReplayUsage = "usage: whetstone replay";
 
     /// <summary>

@@ -20,6 +20,7 @@ dotnet run --project src/Whetstone.Server -- export > mine.jsonl                
 dotnet run --project src/Whetstone.Server -- export --repository example/app --before 2026-10-01
 dotnet run --project src/Whetstone.Server -- forget --repository example/app           # counts, deletes nothing
 dotnet run --project src/Whetstone.Server -- forget --repository example/app --confirm # deletes
+dotnet run --project src/Whetstone.Server -- reindex                                    # upgrade an older store file, rebuild its search index
 ```
 
 Over HTTP every MCP request needs `Authorization: Bearer <WHETSTONE_API_KEY>`; `GET /health` needs none.

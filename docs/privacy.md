@@ -10,6 +10,8 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | the prompt as sent, with secrets redacted | 0.2 | until deleted |
 | the context the client sent (repository, commit, task kind, client) | 0.2 | until deleted |
 | the outcome from `feedback` | 0.2 | until deleted |
+| a search index over the stored prompt (words only, no other text) | 0.3 | until deleted; rebuilt on every `forget` |
+| which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |
 
 Nothing else: no file contents, no model answers, no other users' data.

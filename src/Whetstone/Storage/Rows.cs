@@ -44,6 +44,9 @@ public sealed record RequestRow
 
     public required bool Truncated { get; init; }
 
+    /// <summary>The stored request this one's answer drew on (retrieval, goal 0.3); null for a pass-through.</summary>
+    public string? SourceRequestId { get; init; }
+
     public static RequestRow From(EnhanceRequest request, EnhanceResponse response, DateTimeOffset at)
     {
         // Redact the whole prompt first and cut after: a cut first could leave half a secret that no pattern matches.
