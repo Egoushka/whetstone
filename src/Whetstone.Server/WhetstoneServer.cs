@@ -52,8 +52,10 @@ public static class WhetstoneServer
         });
         // A page in the owner's browser could reach the port through DNS rebinding; only a known Host is accepted.
         builder.Services.AddHostFiltering(o => o.AllowedHosts = ["localhost", "127.0.0.1", .. hosts]);
+        // Stateless: the tools never call the client, and a hook sends initialize and one call per prompt. A stateful session
+        // outlives each of those for the SDK's two-hour idle timeout (about 13 KB each, measured).
         AddTools(builder.Services, enhancer, store)
-            .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.StatefulForInitializeClients);
+            .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless);
 
         var app = builder.Build();
         app.UseHostFiltering();

@@ -55,6 +55,30 @@ public sealed class HttpServerTests : IAsyncDisposable
         Assert.False(response.HeldOut);
     }
 
+    // A hook that sends initialize and one call per prompt must not leave a session behind each time: the SDK keeps a stateful
+    // session for two hours by default, so thousands of prompts a day grew the process to gigabytes.
+    [Fact]
+    public async Task Initialize_opens_no_session_and_a_call_needs_none()
+    {
+        var address = await Start();
+        using var http = new HttpClient { BaseAddress = address };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Key);
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        http.DefaultRequestHeaders.Accept.ParseAdd("text/event-stream");
+
+        using var initialize = await http.PostAsync("/v1/mcp", Json(
+            """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"hook","version":"1"}}}"""));
+        using var call = await http.PostAsync("/v1/mcp", Json(
+            """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"enhance","arguments":{"prompt":"review my diff"}}}"""));
+
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        Assert.False(initialize.Headers.Contains("Mcp-Session-Id"));
+        Assert.Equal(HttpStatusCode.OK, call.StatusCode);
+        Assert.Contains("review my diff", await call.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    private static StringContent Json(string body) => new(body, System.Text.Encoding.UTF8, "application/json");
+
     [Fact]
     public async Task A_late_enhancer_answers_with_the_original_over_mcp()
     {
