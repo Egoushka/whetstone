@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,6 +26,8 @@ public sealed record ServerSettings(int Port, string ApiKey, string Listen = "12
 public static class WhetstoneServer
 {
     public const int MaxRequestBytes = 1_000_000;
+
+    private const long MiB = 1024 * 1024;
 
     /// <summary>Sent to MCP clients on initialize so they know when to call whetstone without loading the tools first.</summary>
     public const string Instructions =
@@ -70,7 +73,24 @@ public static class WhetstoneServer
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
         });
         var memory = store ?? NullStore.Instance;
-        app.MapGet("/health", () => Results.Json(new { status = "ok", version = Version, store_failures = memory.Failures }));
+        app.MapGet("/health", () =>
+        {
+            // Process numbers for a supervisor: a 16-hour run once reached a 9.5 GB footprint with no cause on record.
+            using var process = Process.GetCurrentProcess();
+            var gc = GC.GetGCMemoryInfo();
+            return Results.Json(new
+            {
+                status = "ok",
+                version = Version,
+                store_failures = memory.Failures,
+                uptime_seconds = (long)(DateTime.Now - process.StartTime).TotalSeconds,
+                cpu_seconds = (long)process.TotalProcessorTime.TotalSeconds,
+                threads = process.Threads.Count,
+                heap_mb = GC.GetTotalMemory(false) / MiB,
+                committed_mb = gc.TotalCommittedBytes / MiB,
+                gen2_collections = GC.CollectionCount(2),
+            });
+        });
         app.MapMcp("/v1/mcp");
         return app;
     }
