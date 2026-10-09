@@ -1,0 +1,9 @@
+# gitleaks settings for scripts/audit-export.sh only: the default rules, minus words that read as keys in ordinary prose.
+# Each entry is a whole secret as gitleaks extracts it, checked by hand as not a credential.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ordinary words the generic-api-key rule takes for a key after 'key,' or 'Valkey,'"
+regexTarget = "secret"
+regexes = ['''(?i)\A(s3-compatible)\z''']

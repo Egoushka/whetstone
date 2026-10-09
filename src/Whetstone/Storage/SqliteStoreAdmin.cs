@@ -10,7 +10,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
 {
     private const int BusyMilliseconds = 5_000;
 
-    private const string Where = "WHERE ($repository IS NULL OR repository = $repository) AND ($before IS NULL OR created_at < $before)";
+    /// <summary>The prefix of every id an import gives a past prompt (Whetstone.Import.Importer).</summary>
+    public const string ImportedPrefix = "imp-";
+
+    private const string Where = "WHERE ($repository IS NULL OR repository = $repository) AND ($before IS NULL OR created_at < $before) AND ($text IS NULL OR prompt_matches(prompt))";
 
     public async Task<int> CountAsync(RowFilter filter, CancellationToken ct)
     {
@@ -88,6 +91,29 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return deleted;
     }
 
+    public async Task<string?> FindAsync(string importedId, string client, string prompt, DateTimeOffset at, TimeSpan within, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return null;
+        var (connection, _) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT request_id FROM requests
+            WHERE request_id = $self
+               OR (substr(request_id, 1, length($prefix)) <> $prefix
+                   AND client = $client AND prompt = $prompt AND created_at >= $from AND created_at <= $to)
+            ORDER BY request_id = $self DESC, created_at, request_id LIMIT 1
+            """;
+        command.Parameters.AddWithValue("$self", importedId);
+        command.Parameters.AddWithValue("$prefix", ImportedPrefix);
+        command.Parameters.AddWithValue("$client", client);
+        command.Parameters.AddWithValue("$prompt", prompt);
+        command.Parameters.AddWithValue("$from", (at - within).UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$to", (at + within).UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        return await command.ExecuteScalarAsync(ct) as string;
+    }
+
     public async Task<int> ReindexAsync(CancellationToken ct)
     {
         if (!File.Exists(path))
@@ -127,6 +153,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     {
         command.Parameters.AddWithValue("$repository", (object?)filter.Repository ?? DBNull.Value);
         command.Parameters.AddWithValue("$before", (object?)filter.BeforeText ?? DBNull.Value);
+        command.Parameters.AddWithValue("$text", filter.Text is null ? DBNull.Value : 1);
+        // SQLite has no regular expressions; the filter's own expression runs in .NET, row by row.
+        var text = filter.Text;
+        command.Connection!.CreateFunction("prompt_matches", (string prompt) => text is not null && text.IsMatch(prompt), isDeterministic: true);
     }
 
     private static string? Text(SqliteDataReader reader, int i) => reader.IsDBNull(i) ? null : reader.GetString(i);

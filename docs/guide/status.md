@@ -29,7 +29,9 @@ section: "Project"
 | A held-out share and a report (0.4) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | Templates, versioned (0.5) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | An optional model rewrite (0.6) | not yet | [ROADMAP.md](../../ROADMAP.md) |
-| Import of agent transcripts (0.7) | not yet | [ROADMAP.md](../../ROADMAP.md) |
+| Import of Claude Code sessions with an implicit score | works | [ImportTests.cs](../../tests/Whetstone.Tests/Import/ImportTests.cs) |
+| Removing stored prompts by content (`forget --text`) | works | [CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs) |
+| Import from other agents and from a memory service (rest of 0.7) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | A task-kind suggestion (0.8) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | A stable contract (1.0) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | Serving beyond loopback from the command line | not yet | [Program.cs](../../src/Whetstone.Server/Program.cs) |
@@ -50,7 +52,7 @@ By default, the prompt unchanged: the enhancer is `PassThrough`, and every answe
 - gitleaks over the full history;
 - on pull requests, a check of the commit messages ([check-commits.sh](../../scripts/check-commits.sh)).
 
-The test suite covers the contract, the deadline, both transports, the redactor, the store, the index, retrieval and the commands. This page states no test count. Nothing here measures speed beyond the deadline tests, and no benchmark exists.
+The test suite covers the contract, the deadline, both transports, the redactor, the store, the index, retrieval, the import and the commands. This page states no test count. Nothing here measures speed beyond the deadline tests, and no benchmark exists.
 
 ## Limits
 

@@ -13,6 +13,7 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | a search index over the stored prompt (words only, no other text) | 0.3 | until deleted; rebuilt on every `forget` |
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |
+| prompts typed in past sessions, imported by the owner, each with an implicit score | 0.7 | until deleted |
 
 Nothing else: no file contents, no model answers, no other users' data.
 
@@ -32,9 +33,13 @@ Nothing else: no file contents, no model answers, no other users' data.
 - **One store per user.** A file per user under the data directory (mode 0600, directory 0700); no query reads across
   stores.
 - **Export and delete.** `whetstone export` writes everything stored for the user as JSON lines; `whetstone forget`
-  deletes it, with an optional filter (a repository, a date range), and only counts matches until `--confirm` is given.
+  deletes it, with an optional filter (a repository, a date range, a text pattern), and only counts matches until `--confirm` is given.
   They are commands, not MCP tools, so no agent can call them (ADR 0003). Deletion removes it from templates too: a
   template written from a forgotten prompt is rebuilt or dropped.
+- **Import is the owner's act.** `whetstone import` reads past session transcripts from a folder the owner names and stores
+  only the prompts a person typed, redacted like live ones, with a score derived from what came next (no model call). It
+  stores nothing until `--confirm`. `--exclude` and `--exclude-text` keep whole sessions out by folder or by content, and
+  `forget --text` removes stored rows by content. Message and session ids from the transcript are not stored.
 - **Outbound calls.** The only outbound call is to the rewriting model the user configures (goal 0.6), and only the
   redacted prompt and the chosen template are sent.
 - **This repository holds no real prompt.** Tests and examples use invented ones.

@@ -20,7 +20,10 @@ dotnet run --project src/Whetstone.Server -- export > mine.jsonl                
 dotnet run --project src/Whetstone.Server -- export --repository example/app --before 2026-10-01
 dotnet run --project src/Whetstone.Server -- forget --repository example/app           # counts, deletes nothing
 dotnet run --project src/Whetstone.Server -- forget --repository example/app --confirm # deletes
+dotnet run --project src/Whetstone.Server -- forget --text 'internal-codename' --confirm  # deletes prompts that match, ignoring case
 dotnet run --project src/Whetstone.Server -- reindex                                    # upgrade an older store file, rebuild its search index
+dotnet run --project src/Whetstone.Server -- import claude-code <sessions-dir> --exclude <private-dir> --confirm
+                                                                                        # past prompts, each scored by what came next
 ```
 
 Retrieval is off. `WHETSTONE_RETRIEVAL=on` with `WHETSTONE_RETRIEVAL_MIN_SCORE=<n>` (read it off `whetstone replay`) makes `enhance` append the closest earlier prompt of yours that was scored well, quoted after your prompt; no match, no scored prompt or any failure gives your prompt back unchanged.
