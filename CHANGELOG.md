@@ -7,6 +7,7 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ### Added
 
+- Run measures in `feedback/v1`, additively: `outcome.completed`, `tokens_in`, `tokens_out`, `cache_read_tokens`, `cache_write_tokens`, `duration_ms`, `tool_calls`, `asked_again` and `effort`. The store is schema version 3 (an older file is upgraded on first use, keeping every row), a later report adds measures without erasing earlier ones, and `export/v1` carries them inside `outcome` when reported (WHET-29).
 - `whetstone import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]` stores the prompts typed in past Claude Code sessions, redacted, each with an implicit score from the next prompt and the session's commits (goal 0.7, brought forward; docs/specs/2026-10-09-it-imports-design.md). It counts until `--confirm`, stores each message once, and scores rather than duplicates a prompt a live client already stored.
 - `export` and `forget` take `--text REGEX`, matched against the stored prompt ignoring case; `forget --imported` undoes an import and keeps live rows.
 - `import --exclude` also drops sessions whose tools opened, edited or searched a path in the folder, or whose shell commands moved into it.

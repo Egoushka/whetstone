@@ -35,7 +35,7 @@
       }
     },
     "outcome": {
-      "description": "Null until the client reports through feedback; then what it reported, each field null when it did not know.",
+      "description": "Null until the client reports through feedback; then what it reported. The first five fields are null when the client did not know; the run measures (completed to effort) are left out.",
       "oneOf": [
         { "type": "null" },
         {
@@ -48,6 +48,15 @@
             "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "cost_usd": { "type": ["number", "null"], "minimum": 0 },
             "model": { "type": ["string", "null"] },
+            "completed": { "type": "boolean" },
+            "tokens_in": { "type": "integer", "minimum": 0 },
+            "tokens_out": { "type": "integer", "minimum": 0 },
+            "cache_read_tokens": { "type": "integer", "minimum": 0 },
+            "cache_write_tokens": { "type": "integer", "minimum": 0 },
+            "duration_ms": { "type": "integer", "minimum": 0 },
+            "tool_calls": { "type": "integer", "minimum": 0 },
+            "asked_again": { "type": "boolean" },
+            "effort": { "type": "string" },
             "reported_at": { "type": "string", "format": "date-time" }
           }
         }

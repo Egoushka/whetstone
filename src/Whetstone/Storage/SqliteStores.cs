@@ -102,7 +102,11 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDispo
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE requests SET rewrite_accepted = $accepted, model_overridden = $overridden, score = $score, cost_usd = $cost,
-              model = $model, feedback_at = $at
+              model = $model, feedback_at = $at,
+              completed = COALESCE($completed, completed), tokens_in = COALESCE($tin, tokens_in), tokens_out = COALESCE($tout, tokens_out),
+              cache_read_tokens = COALESCE($cread, cache_read_tokens), cache_write_tokens = COALESCE($cwrite, cache_write_tokens),
+              duration_ms = COALESCE($duration, duration_ms), tool_calls = COALESCE($tools, tool_calls),
+              asked_again = COALESCE($asked, asked_again), effort = COALESCE($effort, effort)
             WHERE request_id = $id
             """;
         command.Parameters.AddWithValue("$id", outcome.RequestId);
@@ -112,6 +116,16 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDispo
         command.Parameters.AddWithValue("$score", (object?)outcome.Score ?? DBNull.Value);
         command.Parameters.AddWithValue("$cost", outcome.CostUsd is { } c ? (double)c : DBNull.Value);
         command.Parameters.AddWithValue("$model", (object?)outcome.Model ?? DBNull.Value);
+        // A later report adds the measures it has and never erases one an earlier report gave.
+        command.Parameters.AddWithValue("$completed", outcome.Completed is { } d ? d ? 1 : 0 : DBNull.Value);
+        command.Parameters.AddWithValue("$tin", (object?)outcome.TokensIn ?? DBNull.Value);
+        command.Parameters.AddWithValue("$tout", (object?)outcome.TokensOut ?? DBNull.Value);
+        command.Parameters.AddWithValue("$cread", (object?)outcome.CacheReadTokens ?? DBNull.Value);
+        command.Parameters.AddWithValue("$cwrite", (object?)outcome.CacheWriteTokens ?? DBNull.Value);
+        command.Parameters.AddWithValue("$duration", (object?)outcome.DurationMs ?? DBNull.Value);
+        command.Parameters.AddWithValue("$tools", (object?)outcome.ToolCalls ?? DBNull.Value);
+        command.Parameters.AddWithValue("$asked", outcome.AskedAgain is { } k ? k ? 1 : 0 : DBNull.Value);
+        command.Parameters.AddWithValue("$effort", (object?)outcome.Effort ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct) > 0;
 

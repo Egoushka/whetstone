@@ -16,7 +16,16 @@
         "model_overridden": { "type": ["boolean", "null"] },
         "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
         "cost_usd": { "type": ["number", "null"], "minimum": 0 },
-        "model": { "type": ["string", "null"] }
+        "model": { "type": ["string", "null"] },
+        "completed": { "type": ["boolean", "null"], "description": "The run the prompt started finished and was not abandoned or failed." },
+        "tokens_in": { "type": ["integer", "null"], "minimum": 0, "description": "Input tokens not read from or written to the cache." },
+        "tokens_out": { "type": ["integer", "null"], "minimum": 0 },
+        "cache_read_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "cache_write_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "tool_calls": { "type": ["integer", "null"], "minimum": 0 },
+        "asked_again": { "type": ["boolean", "null"], "description": "The author repeated or corrected the request within the same turn." },
+        "effort": { "type": ["string", "null"], "description": "The reasoning effort the run used, as the client names it." }
       }
     }
   }

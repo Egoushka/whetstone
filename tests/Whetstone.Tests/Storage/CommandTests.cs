@@ -87,6 +87,26 @@ public sealed class CommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_measures_reach_the_export_and_are_left_out_when_unreported()
+    {
+        await Seed("req-1", "example/app", Day1, "explore the retry policy");
+        await Seed("req-2", "example/app", Day2, "scored only");
+        var measures = new FeedbackOutcome(Completed: true, TokensIn: 1840, TokensOut: 612, CacheReadTokens: 41200, CacheWriteTokens: 3100, DurationMs: 48250, ToolCalls: 14, AskedAgain: false, Effort: "medium");
+        await _stores.ForUser("owner").RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", measures), Day2), CancellationToken.None);
+        await _stores.ForUser("owner").RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-2", new FeedbackOutcome(Score: 0.5)), Day2), CancellationToken.None);
+
+        var lines = Lines((await Export()).Out);
+
+        foreach (var line in lines)
+            Assert.Empty(ContractSchemas.ValidateExport(JsonDocument.Parse(line).RootElement));
+        var first = JsonDocument.Parse(lines[0]).RootElement.GetProperty("outcome");
+        Assert.Equal((true, 1840, 41200, 14, "medium"), (first.GetProperty("completed").GetBoolean(), first.GetProperty("tokens_in").GetInt32(), first.GetProperty("cache_read_tokens").GetInt32(), first.GetProperty("tool_calls").GetInt32(), first.GetProperty("effort").GetString()));
+        var second = JsonDocument.Parse(lines[1]).RootElement.GetProperty("outcome");
+        Assert.False(second.TryGetProperty("completed", out _));
+        Assert.False(second.TryGetProperty("tokens_in", out _));
+    }
+
+    [Fact]
     public async Task Export_filters_by_repository_and_by_date()
     {
         await SeedThree();

@@ -46,6 +46,34 @@ public sealed class StoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_measures_are_stored_and_a_later_report_never_erases_one()
+    {
+        await Store().RecordAsync(Row("explore the retry policy"), CancellationToken.None);
+        var first = new FeedbackOutcome(Completed: true, TokensIn: 1840, TokensOut: 612, CacheReadTokens: 41200, CacheWriteTokens: 3100, DurationMs: 48250, ToolCalls: 14, AskedAgain: false, Effort: "medium");
+
+        Assert.True(await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", first), At.AddMinutes(1)), CancellationToken.None));
+        Assert.True(await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", new FeedbackOutcome(Score: 0.8, AskedAgain: true)), At.AddMinutes(2)), CancellationToken.None));
+
+        var row = Assert.Single(Db.Requests(_data.FileFor("owner")));
+        Assert.Equal((1L, 1840L, 612L, 41200L, 3100L), ((long)row["completed"]!, (long)row["tokens_in"]!, (long)row["tokens_out"]!, (long)row["cache_read_tokens"]!, (long)row["cache_write_tokens"]!));
+        Assert.Equal((48250L, 14L, "medium"), ((long)row["duration_ms"]!, (long)row["tool_calls"]!, (string)row["effort"]!));
+        Assert.Equal(1L, row["asked_again"]);
+        Assert.Equal(0.8, row["score"]);
+    }
+
+    [Fact]
+    public async Task A_measure_nobody_reported_stays_null_not_zero()
+    {
+        await Store().RecordAsync(Row("p"), CancellationToken.None);
+
+        await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", new FeedbackOutcome(Completed: false)), At.AddMinutes(1)), CancellationToken.None);
+
+        var row = Assert.Single(Db.Requests(_data.FileFor("owner")));
+        Assert.Equal(0L, row["completed"]);
+        Assert.All(Db.MeasureColumns.Where(c => c != "completed"), c => Assert.Null(row[c]));
+    }
+
+    [Fact]
     public async Task Every_seeded_secret_is_absent_from_the_file_after_a_replay()
     {
         var store = Store();

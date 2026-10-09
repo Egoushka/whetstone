@@ -34,10 +34,13 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
         await using var _ = connection;
         await using var command = connection.CreateCommand();
-        // A version 1 file has no source column yet; the server adds it the next time it opens the file.
+        // An older file lacks the columns of a later version; the server adds them the next time it opens the file.
+        var measures = version >= 3
+            ? "completed, tokens_in, tokens_out, cache_read_tokens, cache_write_tokens, duration_ms, tool_calls, asked_again, effort"
+            : "NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL";
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
-                   rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}
+                   rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -51,7 +54,9 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                 new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18)),
                 reported is null
                     ? null
-                    : new ExportOutcome(Flag(reader, 12), Flag(reader, 13), Number(reader, 14), Number(reader, 15), Text(reader, 16), reported));
+                    : new ExportOutcome(Flag(reader, 12), Flag(reader, 13), Number(reader, 14), Number(reader, 15), Text(reader, 16), reported,
+                        Flag(reader, 19), Count(reader, 20), Count(reader, 21), Count(reader, 22), Count(reader, 23), Count(reader, 24), Count(reader, 25),
+                        Flag(reader, 26), Text(reader, 27)));
         }
     }
 
@@ -165,4 +170,6 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     private static bool? Flag(SqliteDataReader reader, int i) => reader.IsDBNull(i) ? null : reader.GetInt64(i) != 0;
 
     private static double? Number(SqliteDataReader reader, int i) => reader.IsDBNull(i) ? null : reader.GetDouble(i);
+
+    private static long? Count(SqliteDataReader reader, int i) => reader.IsDBNull(i) ? null : reader.GetInt64(i);
 }

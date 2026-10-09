@@ -68,12 +68,12 @@ public sealed class IndexTests : IDisposable
     private static object? Pragma(string file, string name) => Db.Query(file, $"PRAGMA {name}")[0].Values.First();
 
     [Fact]
-    public async Task A_new_file_is_version_two_and_finds_a_prompt_by_a_word_in_it()
+    public async Task A_new_file_is_the_current_version_and_finds_a_prompt_by_a_word_in_it()
     {
         await Record("req-1", "stream the invoice parser");
         await Record("req-2", "rotate the signing certificate");
 
-        Assert.Equal(2L, Pragma(_data.FileFor("owner"), "user_version"));
+        Assert.Equal(3L, Pragma(_data.FileFor("owner"), "user_version"));
         Assert.Equal(["req-1"], Search("invoice"));
         Assert.Equal(["req-2"], Search("certificate"));
         Assert.Empty(Search("nothing"));
@@ -86,10 +86,29 @@ public sealed class IndexTests : IDisposable
 
         await Record("new-1", "another quokkaflux question");
 
-        Assert.Equal(2L, Pragma(file, "user_version"));
+        Assert.Equal(3L, Pragma(file, "user_version"));
         Assert.Equal(["new-1", "old-1"], Search("quokkaflux"));
         Assert.Equal(3, Db.Requests(file).Count);
         Assert.Contains(Db.Requests(file), r => (string)r["request_id"]! == "old-1" && (string)r["prompt"]! == "migrate the quokkaflux table" && r["source_request_id"] is null);
+    }
+
+    [Fact]
+    public async Task A_version_two_file_gains_the_run_measure_columns_and_keeps_its_rows()
+    {
+        var file = MakeVersionOneFile(("old-1", "keep this row", "example/app"));
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var upgrade = connection.CreateCommand();
+            upgrade.CommandText = "ALTER TABLE requests ADD COLUMN source_request_id TEXT; PRAGMA user_version = 2";
+            upgrade.ExecuteNonQuery();
+        }
+
+        await Record("new-1", "after the upgrade");
+
+        Assert.Equal(3L, Pragma(file, "user_version"));
+        var old = Assert.Single(Db.Requests(file), r => (string)r["request_id"]! == "old-1");
+        Assert.All(Db.MeasureColumns, c => Assert.Null(old[c]));
     }
 
     [Fact]
@@ -190,7 +209,7 @@ public sealed class IndexTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Equal("Indexed 2 requests.\n", output.ToString());
-        Assert.Equal(2L, Pragma(file, "user_version"));
+        Assert.Equal(3L, Pragma(file, "user_version"));
         Assert.Equal(["old-1"], Search("quokkaflux"));
     }
 
