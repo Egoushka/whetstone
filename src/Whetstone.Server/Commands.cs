@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Whetstone.Contracts;
+using Whetstone.Import;
 using Whetstone.Retrieval;
 using Whetstone.Storage;
 
@@ -17,14 +19,14 @@ public static class Commands
     public const int Failed = 1;
     public const int Usage = 2;
 
-    public const string ExportUsage = "usage: whetstone export [--repository R] [--before DATE]";
+    public const string ExportUsage = "usage: whetstone export [--repository R] [--before DATE] [--text REGEX]";
 
-    public const string ForgetUsage = "usage: whetstone forget (--all | --repository R [--before DATE] | --before DATE [--repository R]) [--confirm]";
+    public const string ForgetUsage = "usage: whetstone forget (--all | [--repository R] [--before DATE] [--text REGEX]) [--confirm]";
 
     /// <summary>One <c>export/v1</c> record per line on <paramref name="output"/>, oldest first. Nothing else goes there.</summary>
     public static async Task<int> ExportAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
     {
-        if (!Parse(options, ["--repository", "--before"], [], out var parsed, out var problem) || !Filter(parsed!, out var filter, out problem))
+        if (!Parse(options, ["--repository", "--before", "--text"], [], out var parsed, out var problem) || !Filter(parsed!, out var filter, out problem))
             return Refuse(error, problem!, ExportUsage);
         try
         {
@@ -86,16 +88,56 @@ public static class Commands
         }
     }
 
+    public const string ImportUsage = "usage: whetstone import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]";
+
+    /// <summary>
+    /// Reads past Claude Code sessions under DIR and stores what the person typed, each prompt with an implicit score
+    /// (docs/specs/2026-10-09-it-imports-design.md). Counts and stops until <c>--confirm</c> is given, like <c>forget</c>.
+    /// </summary>
+    public static async Task<int> ImportAsync(
+        IReadOnlyList<string> options, IStore store, IStoreAdmin admin, IRepositoryHistory history, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count < 2 || options[0] != "claude-code" || options[1].StartsWith("--", StringComparison.Ordinal))
+            return Refuse(error, "say which client's sessions and where: claude-code DIR", ImportUsage);
+        var directory = options[1];
+        if (!Parse([.. options.Skip(2)], ["--exclude", "--exclude-text"], ["--confirm"], out var parsed, out var problem))
+            return Refuse(error, problem!, ImportUsage);
+        Regex? excludedText = null;
+        if (parsed!.TryGetValue("--exclude-text", out var pattern) && !TryRegex(pattern, out excludedText, out problem))
+            return Refuse(error, problem!.Replace("--text", "--exclude-text", StringComparison.Ordinal), ImportUsage);
+        if (!Directory.Exists(directory))
+            return Refuse(error, $"no directory '{directory}'", ImportUsage);
+        IReadOnlyList<string> excluded = parsed.TryGetValue("--exclude", out var exclude) ? [exclude] : [];
+        var write = parsed.ContainsKey("--confirm");
+        try
+        {
+            var sessions = ClaudeCodeTranscripts.Read(directory);
+            var report = await Importer.RunAsync(sessions, new ImportExclusions(excluded, excludedText), history, store, admin, write, DateTimeOffset.UtcNow, ct);
+            await output.WriteAsync(
+                $"{report.Sessions} sessions read, {report.ExcludedSessions} excluded; {report.Prompts} typed prompts: "
+                + $"{report.New} new, {report.Matched} already stored by a live client, {report.Prompts - report.New - report.Matched} imported before.\n");
+            await output.WriteAsync(write
+                ? $"Stored {report.New} and scored {report.Prompts}.\n"
+                : "Nothing was stored. Add --confirm to store and score them.\n");
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return Fail(error, "import", e);
+        }
+    }
+
     /// <summary>Counts what matches and stops, until <c>--confirm</c> is given; then deletes it and reports how many went.</summary>
     public static async Task<int> ForgetAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
     {
-        if (!Parse(options, ["--repository", "--before"], ["--all", "--confirm"], out var parsed, out var problem))
+        if (!Parse(options, ["--repository", "--before", "--text"], ["--all", "--confirm"], out var parsed, out var problem))
             return Refuse(error, problem!, ForgetUsage);
         var all = parsed!.ContainsKey("--all");
-        if (all && (parsed.ContainsKey("--repository") || parsed.ContainsKey("--before")))
+        var filtered = parsed.ContainsKey("--repository") || parsed.ContainsKey("--before") || parsed.ContainsKey("--text");
+        if (all && filtered)
             return Refuse(error, "--all cannot be combined with a filter", ForgetUsage);
-        if (!all && !parsed.ContainsKey("--repository") && !parsed.ContainsKey("--before"))
-            return Refuse(error, "say what to forget: --all, --repository or --before", ForgetUsage);
+        if (!all && !filtered)
+            return Refuse(error, "say what to forget: --all, --repository, --before or --text", ForgetUsage);
         if (!Filter(parsed, out var filter, out problem))
             return Refuse(error, problem!, ForgetUsage);
         try
@@ -145,8 +187,33 @@ public static class Commands
             }
             before = when;
         }
-        filter = new RowFilter(parsed.GetValueOrDefault("--repository"), before);
+        Regex? matching = null;
+        if (parsed.TryGetValue("--text", out var pattern) && !TryRegex(pattern, out matching, out problem))
+            return false;
+        filter = new RowFilter(parsed.GetValueOrDefault("--repository"), before, matching);
         return true;
+    }
+
+    /// <summary>Case-insensitive and linear-time, so a pattern cannot hang a command on a long prompt.</summary>
+    private static bool TryRegex(string pattern, out Regex? regex, out string? problem)
+    {
+        regex = null;
+        problem = null;
+        if (pattern.Length == 0)
+        {
+            problem = "--text needs a non-empty expression";
+            return false;
+        }
+        try
+        {
+            regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.NonBacktracking | RegexOptions.CultureInvariant);
+            return true;
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException)
+        {
+            problem = $"--text is not an expression this whetstone can run: {e.Message}";
+            return false;
+        }
     }
 
     /// <summary>Strict: every token is a known option, each at most once, a valued option has a value, a flag has none.</summary>

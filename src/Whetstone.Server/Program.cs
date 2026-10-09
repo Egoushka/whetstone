@@ -10,12 +10,15 @@ const string Usage = """
       mcp                                   the MCP tools over stdio, for a client that starts whetstone itself
       serve [--listen ADDR] [--port N]      MCP over HTTP at /v1/mcp and GET /health (127.0.0.1:7340 by default);
                                             the bearer key is read from WHETSTONE_API_KEY
-      export [--repository R] [--before DATE]
+      export [--repository R] [--before DATE] [--text REGEX]
                                             everything stored for you, as JSON lines (export/v1) on stdout
       replay                                for each scored request, the earlier one that best matches it (reads only)
       reindex                               upgrade an older store file and rebuild its search index
-      forget (--all | --repository R | --before DATE) [--confirm]
+      forget (--all | [--repository R] [--before DATE] [--text REGEX]) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
+      import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]
+                                            counts the prompts typed in past sessions under DIR; with --confirm,
+                                            stores them, redacted, each scored by what came next
     Every request is stored, redacted, in <WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db
     (user data directory and "owner" by default).
     """;
@@ -59,6 +62,8 @@ switch (args)
         return await Commands.ReplayAsync(replayOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["reindex", .. var reindexOptions]:
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["import", .. var importOptions]:
+        return await Commands.ImportAsync(importOptions, stores.ForUser(user), stores.AdminFor(user), new GitHistory(), Console.Out, Console.Error, cts.Token);
     case ["forget", .. var forgetOptions]:
         return await Commands.ForgetAsync(forgetOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["mcp"]:

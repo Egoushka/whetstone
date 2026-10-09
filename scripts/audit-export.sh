@@ -5,9 +5,9 @@
 #   scripts/audit-export.sh dotnet path/to/Whetstone.Server.dll  runs a published build
 # The store comes from WHETSTONE_DATA_DIR and WHETSTONE_USER, as for the server. Exit 0: gitleaks found nothing in the export.
 # A finding means the redactor missed a shape: add it to tests/Whetstone.Tests/Redaction/Corpus.cs first, then fix the redactor,
-# then `whetstone forget` the row.
+# then `whetstone forget` the row. A finding that is an ordinary word goes in scripts/audit-export.toml, never a real credential.
 set -eu
 if [ "$#" -eq 0 ]; then
   set -- dotnet run --project "$(dirname "$0")/../src/Whetstone.Server" --
 fi
-"$@" export | gitleaks stdin --redact --no-banner
+"$@" export | gitleaks stdin --redact --no-banner --config "$(dirname "$0")/audit-export.toml"

@@ -25,7 +25,7 @@ Legend: ✅ done · ⏳ in progress · ▶ next · · later
 
 ## Stage 2 — It knows you beyond one client (0.7–1.0)
 
-- · **0.7** It imports history: past prompts from agent transcripts (Claude Code, OpenCode) and from a memory service,
+- ⏳ **0.7** It imports history: past prompts from agent transcripts (Claude Code, OpenCode) and from a memory service,
   redacted on the way in.
 - · **0.8** It suggests the kind of task, so a client's model picker can use it.
 - · **1.0** The contract is declared stable.

@@ -134,6 +134,29 @@ public sealed class CommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Forget_with_text_removes_only_prompts_that_match_ignoring_case()
+    {
+        await SeedThree();
+
+        var (code, output, _) = await Forget("--text", "PARSER|exporter", "--confirm");
+
+        Assert.Equal(0, code);
+        Assert.Equal("Deleted 2 requests.\n", output);
+        Assert.Equal(["req-3"], Ids((await Export()).Out));
+    }
+
+    [Fact]
+    public async Task Text_narrows_together_with_the_other_filters_and_export_takes_it_too()
+    {
+        await SeedThree();
+
+        Assert.Equal(["req-1"], Ids((await Export("--text", "prompt about", "--before", "2026-10-02")).Out));
+        Assert.Equal("1 request match. Nothing was deleted. Run `whetstone export` first if you want a copy, then add --confirm to delete.\n",
+            (await Forget("--text", "something", "--repository", "example/other")).Out);
+        Assert.Equal(3, Db.Requests(_data.FileFor("owner")).Count);
+    }
+
+    [Fact]
     public async Task Forget_before_a_date_removes_only_what_came_before()
     {
         await SeedThree();
@@ -204,6 +227,10 @@ public sealed class CommandTests : IDisposable
     [InlineData("--all", "--all")]
     [InlineData("--repository", "a", "--repository", "b")]
     [InlineData("example/app")]
+    [InlineData("--all", "--text", "parser")]
+    [InlineData("--text", "")]
+    [InlineData("--text", "(unclosed")]
+    [InlineData("--text", "parser", "--text", "exporter")]
     public async Task A_forget_that_is_not_clearly_asked_for_is_a_usage_error_and_deletes_nothing(params string[] options)
     {
         await SeedThree();
@@ -221,6 +248,7 @@ public sealed class CommandTests : IDisposable
     [InlineData("--before", "yesterday-ish")]
     [InlineData("--repository")]
     [InlineData("--confirm")]
+    [InlineData("--text", "[")]
     public async Task An_export_with_a_bad_option_is_a_usage_error(params string[] options)
     {
         await SeedThree();
