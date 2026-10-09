@@ -3,7 +3,15 @@
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Ordinary words the generic-api-key rule takes for a key after 'key,' or 'Valkey,'"
 regexTarget = "secret"
 regexes = ['''(?i)\A(s3-compatible)\z''']
+
+# Sourcegraph's rule reads any 40 hex digits as a token, and a git commit hash is exactly that. Allowed only where the text
+# names it a commit ("commit": "<hash>", as chargehand's context carries it); a bare 40-hex string is still a finding.
+[[allowlists]]
+description = "A git commit hash in a commit field"
+targetRules = ["sourcegraph-access-token"]
+regexTarget = "line"
+regexes = ['''commit\\?"\s*:\s*\\?"[0-9a-f]{40}\\?"''']
