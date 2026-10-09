@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Whetstone.Retrieval;
+using Whetstone.Templates;
 
 namespace Whetstone.Storage;
 
@@ -36,6 +37,9 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
     /// <summary>What the retriever may read of a user's store (goal 0.3); the same file as <see cref="ForUser"/>.</summary>
     public IRetrievalIndex IndexFor(string user) => (SqliteStore)ForUser(user);
 
+    /// <summary>The template store of a user; the same file as <see cref="ForUser"/>.</summary>
+    public ITemplates TemplatesFor(string user) => (SqliteStore)ForUser(user);
+
     public IStore ForUser(string user)
     {
         var path = PathFor(user);
@@ -59,7 +63,7 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
 }
 
 /// <summary>A user's file, opened per call: one writer at a time, no connection held between requests.</summary>
-internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDisposable
+internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITemplates, IDisposable
 {
     private const int BusyMilliseconds = 200;
 
@@ -78,8 +82,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDispo
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT OR REPLACE INTO requests
-              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id)
-            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source)
+              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm)
+            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm)
             """;
         command.Parameters.AddWithValue("$id", row.RequestId);
         command.Parameters.AddWithValue("$at", Text(row.CreatedAt));
@@ -94,6 +98,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDispo
         command.Parameters.AddWithValue("$held", row.HeldOut ? 1 : 0);
         command.Parameters.AddWithValue("$cut", row.Truncated ? 1 : 0);
         command.Parameters.AddWithValue("$source", (object?)row.SourceRequestId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$arm", (object?)row.Arm ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct);
 
@@ -157,6 +162,50 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, IDispo
             found.Add(new Candidate(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetDouble(5), reader.GetDouble(6)));
         return found;
+    }, ct);
+
+    public async Task<KindTemplates> ForKindAsync(string kind, CancellationToken ct) => await UseAsync(async connection =>
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT template_id, version, kind, before_text, after_text, source, role FROM templates WHERE kind = $kind AND role IN ('champion', 'challenger')";
+        command.Parameters.AddWithValue("$kind", kind);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        Template? champion = null, challenger = null;
+        while (await reader.ReadAsync(ct))
+        {
+            var template = new Template(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5));
+            if (reader.GetString(6) == TemplateRoles.Champion)
+                champion = template;
+            else
+                challenger = template;
+        }
+        return new KindTemplates(champion, challenger);
+    }, ct);
+
+    public async Task SeedAsync(IReadOnlyList<Template> templates, string role, CancellationToken ct) => await UseAsync(async connection =>
+    {
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+        foreach (var template in templates)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            // OR IGNORE: a version already stored keeps its text and role, and a kind that has a champion keeps it.
+            command.CommandText = """
+                INSERT OR IGNORE INTO templates (template_id, version, kind, before_text, after_text, source, role, created_at)
+                VALUES ($id, $version, $kind, $before, $after, $source, $role, $at)
+                """;
+            command.Parameters.AddWithValue("$id", template.Id);
+            command.Parameters.AddWithValue("$version", template.Version);
+            command.Parameters.AddWithValue("$kind", template.Kind);
+            command.Parameters.AddWithValue("$before", template.Before);
+            command.Parameters.AddWithValue("$after", template.After);
+            command.Parameters.AddWithValue("$source", template.Source);
+            command.Parameters.AddWithValue("$role", role);
+            command.Parameters.AddWithValue("$at", Text(TimeProvider.System.GetUtcNow()));
+            await command.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return 0;
     }, ct);
 
     private static string Text(DateTimeOffset at) => at.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);

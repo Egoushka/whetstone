@@ -31,7 +31,8 @@
         "template_id": { "type": ["string", "null"] },
         "template_version": { "type": ["string", "null"] },
         "held_out": { "type": "boolean" },
-        "source_request_id": { "type": "string", "minLength": 1, "description": "The stored request a retrieval drew on; left out when there was none." }
+        "source_request_id": { "type": "string", "minLength": 1, "description": "The stored request a retrieval drew on; left out when there was none." },
+        "arm": { "enum": ["champion", "challenger", "held_out"], "description": "The arm of a template trial the request was given; left out when no trial applied." }
       }
     },
     "outcome": {

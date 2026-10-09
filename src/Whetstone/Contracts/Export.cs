@@ -16,9 +16,11 @@ public sealed record ExportContext(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Client = null);
 
 /// <param name="SourceRequestId">The stored request a retrieval drew on; left out when there was none.</param>
+/// <param name="Arm"><c>champion</c>, <c>challenger</c> or <c>held_out</c> when a template trial applied; left out otherwise.</param>
 public sealed record ExportAnswer(
     bool Changed, string? TemplateId, string? TemplateVersion, bool HeldOut,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRequestId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRequestId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Arm = null);
 
 /// <summary>The run measures are left out when the client did not report them, as the schema has no null there.</summary>
 public sealed record ExportOutcome(

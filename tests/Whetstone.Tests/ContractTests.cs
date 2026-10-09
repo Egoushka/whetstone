@@ -29,6 +29,7 @@ public class ContractTests
     [InlineData("invalid-missing-prompt.json")]
     [InlineData("invalid-score-out-of-range.json")]
     [InlineData("invalid-unknown-field.json")]
+    [InlineData("invalid-unknown-arm.json")]
     public void Invalid_export_example_is_refused_by_the_embedded_schema(string name) =>
         Assert.NotEmpty(ContractSchemas.ValidateExport(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "export", "v1", "examples", name))).RootElement));
 

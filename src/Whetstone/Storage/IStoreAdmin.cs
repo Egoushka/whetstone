@@ -30,6 +30,9 @@ public interface IStoreAdmin
 
     IAsyncEnumerable<ExportRecord> ExportAsync(RowFilter filter, CancellationToken ct);
 
+    /// <summary>Every stored template version with its role; empty for a file from before the template store.</summary>
+    Task<IReadOnlyList<Whetstone.Templates.TemplateRow>> TemplatesAsync(CancellationToken ct);
+
     /// <summary>Upgrades an older file and rebuilds the search index from the stored rows. Returns how many rows it covers.</summary>
     Task<int> ReindexAsync(CancellationToken ct);
 

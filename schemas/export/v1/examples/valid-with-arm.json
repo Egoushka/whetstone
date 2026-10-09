@@ -1,0 +1,1 @@
+{ "request_id": "req-0005", "created_at": "2026-10-05T12:00:00.0000000Z", "prompt": "list the files that define the retry policy", "truncated": false, "context": { "task_kind": "agent/explore", "client": "claude-code/agent" }, "answer": { "changed": true, "template_id": "agent-brief-readonly", "template_version": "1", "held_out": false, "arm": "champion" }, "outcome": null }
