@@ -7,6 +7,10 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ### Added
 
+- `whetstone replay` ranks stored prompts with BM25 and prints, for each scored request, the earlier one that best matches it and how many rows are eligible; it reads only.
+- A full-text index over stored prompts, kept in step with the store, and `whetstone reindex` to upgrade an older file. `export/v1` gains the optional `source_request_id`.
+- Retrieval, off by default: with `WHETSTONE_RETRIEVAL=on` and `WHETSTONE_RETRIEVAL_MIN_SCORE`, `enhance` appends the closest earlier prompt that was scored at or above the user's median. No match, no scored row or any failure returns the prompt unchanged, counted as `retrieval_failures` in `GET /health`.
+- `GET /health` reports uptime, CPU seconds, threads and memory.
 - `scripts/audit-export.sh`: gitleaks over `whetstone export`, the audit step of goal 0.2's bar (it fails on a store holding an unredacted token, which the script's author checked once by hand).
 - The redactor (`Whetstone.Redaction.Redactor`): secret-shaped text becomes `[REDACTED:kind]` before anything is stored, in linear time, with a corpus of 31 secret shapes and 20 look-alikes that must be kept. The store calls it.
 - The memory store (ADR 0003): every `enhance` is stored, redacted, in `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db` (SQLite, directory 0700, file 0600; user data directory and `owner` by default), and `feedback` fills the outcome of the row with that `request_id`. The prompt is cut at 32,000 characters after redaction; the rewrite is not kept. A storage failure, a slow store or an unwritable directory changes no answer: it is counted as `store_failures` in `GET /health` and logged by exception type.
