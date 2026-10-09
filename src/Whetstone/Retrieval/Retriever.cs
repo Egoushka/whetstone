@@ -5,7 +5,11 @@ using Whetstone.Redaction;
 namespace Whetstone.Retrieval;
 
 /// <summary>What the retriever needs to be told: how close a match must be before it is used. Read it off <c>whetstone replay</c>.</summary>
-public sealed record RetrievalOptions(double MinRelevance);
+/// <param name="MinPromptChars">
+/// Shorter prompts are neither answered with a retrieval nor retrieved: a short follow-up ("merge it") has nothing to learn from an
+/// earlier one. 0 retrieves for every prompt.
+/// </param>
+public sealed record RetrievalOptions(double MinRelevance, int MinPromptChars = 0);
 
 /// <summary>
 /// Goal 0.3: when the prompt resembles an earlier one that went well, add that earlier prompt to the answer; otherwise answer as
@@ -30,7 +34,7 @@ public sealed class Retriever(IEnhancer inner, IRetrievalIndex index, RetrievalO
         var answer = await inner.EnhanceAsync(request, ct);
         try
         {
-            var found = await FindAsync(request.Prompt, ct);
+            var found = request.Prompt.Length < options.MinPromptChars ? null : await FindAsync(request.Prompt, ct);
             return found is null ? answer : answer with { Prompt = Compose(request.Prompt, found), Changed = true, Reason = Reason, SourceRequestId = found.RequestId };
         }
         catch (Exception)
@@ -57,7 +61,7 @@ public sealed class Retriever(IEnhancer inner, IRetrievalIndex index, RetrievalO
             // Best first, so below the bar nothing later qualifies. An identical prompt adds nothing (decision 7).
             if (candidate.Relevance < options.MinRelevance)
                 return null;
-            if (bar.Passes(candidate.TaskKind, candidate.Score) && Words.Normalise(candidate.Prompt) != same)
+            if (candidate.Prompt.Length >= options.MinPromptChars && bar.Passes(candidate.TaskKind, candidate.Score) && Words.Normalise(candidate.Prompt) != same)
                 return candidate;
         }
         return null;

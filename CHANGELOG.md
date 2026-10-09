@@ -8,7 +8,9 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 ### Added
 
 - `whetstone import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]` stores the prompts typed in past Claude Code sessions, redacted, each with an implicit score from the next prompt and the session's commits (goal 0.7, brought forward; docs/specs/2026-10-09-it-imports-design.md). It counts until `--confirm`, stores each message once, and scores rather than duplicates a prompt a live client already stored.
-- `export` and `forget` take `--text REGEX`, matched against the stored prompt ignoring case.
+- `export` and `forget` take `--text REGEX`, matched against the stored prompt ignoring case; `forget --imported` undoes an import and keeps live rows.
+- `import --exclude` also drops sessions whose tools opened, edited or searched a path in the folder, or whose shell commands moved into it.
+- `WHETSTONE_RETRIEVAL_MIN_CHARS` and `replay --min-chars N`: prompts shorter than N are neither answered with a retrieval nor retrieved.
 - `scripts/audit-export.toml`: gitleaks's default rules for the audit, with an allowlist of ordinary words the generic rule reads as keys.
 - `whetstone replay` ranks stored prompts with BM25 and prints, for each scored request, the earlier one that best matches it and how many rows are eligible; it reads only.
 - A full-text index over stored prompts, kept in step with the store, and `whetstone reindex` to upgrade an older file. `export/v1` gains the optional `source_request_id`.

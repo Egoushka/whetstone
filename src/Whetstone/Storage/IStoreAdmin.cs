@@ -10,7 +10,8 @@ namespace Whetstone.Storage;
 /// <param name="Repository">The stored repository, exactly (it is stored redacted).</param>
 /// <param name="Before">Requests answered strictly before this instant.</param>
 /// <param name="Text">Requests whose stored (redacted) prompt matches this expression, ignoring case.</param>
-public sealed record RowFilter(string? Repository = null, DateTimeOffset? Before = null, System.Text.RegularExpressions.Regex? Text = null)
+/// <param name="Imported">Only requests an import stored, not a live client: how an import is undone.</param>
+public sealed record RowFilter(string? Repository = null, DateTimeOffset? Before = null, System.Text.RegularExpressions.Regex? Text = null, bool Imported = false)
 {
     public static readonly RowFilter Everything = new();
 

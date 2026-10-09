@@ -7,7 +7,8 @@ namespace Whetstone.Retrieval;
 /// <param name="Score">BM25 relevance, higher is closer; 0 with no match. It grows with the length of the query, so compare it across pairs only roughly.</param>
 public sealed record ReplayPair(ExportRecord Query, ExportRecord? Match, double Score);
 
-public sealed record ReplayReport(int Total, int Scored, int Eligible, IReadOnlyList<ReplayPair> Pairs);
+/// <param name="MinPromptChars">The length below which requests were left out on both sides, as the retriever would.</param>
+public sealed record ReplayReport(int Total, int Scored, int Eligible, IReadOnlyList<ReplayPair> Pairs, int MinPromptChars = 0);
 
 /// <summary>
 /// For every scored request, the eligible request that ranks first for it by BM25 (SQLite FTS5), so the owner can read real
@@ -15,10 +16,11 @@ public sealed record ReplayReport(int Total, int Scored, int Eligible, IReadOnly
 /// </summary>
 public static class Replay
 {
-    public static ReplayReport Run(IReadOnlyList<ExportRecord> rows)
+    public static ReplayReport Run(IReadOnlyList<ExportRecord> rows, int minPromptChars = 0)
     {
-        var scored = rows.Where(r => r.Outcome?.Score is not null).ToList();
-        var eligible = Eligibility.Eligible(rows);
+        // The median is taken over every scored request, as the retriever does; the length only decides what takes part.
+        var scored = rows.Where(r => r.Outcome?.Score is not null && r.Prompt.Length >= minPromptChars).ToList();
+        var eligible = Eligibility.Eligible(rows).Where(r => r.Prompt.Length >= minPromptChars).ToList();
         var byId = eligible.ToDictionary(r => r.RequestId, StringComparer.Ordinal);
 
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -38,7 +40,7 @@ public static class Replay
         }
 
         var pairs = scored.Select(query => Best(connection, query, byId)).ToList();
-        return new ReplayReport(rows.Count, scored.Count, eligible.Count, pairs);
+        return new ReplayReport(rows.Count, scored.Count, eligible.Count, pairs, minPromptChars);
     }
 
     private static ReplayPair Best(SqliteConnection connection, ExportRecord query, Dictionary<string, ExportRecord> byId)

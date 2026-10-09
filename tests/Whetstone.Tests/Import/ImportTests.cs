@@ -211,6 +211,67 @@ public sealed class ImportTests : IDisposable
         Assert.Single(Rows());
     }
 
+    private static string Tools(string session, int minute, string cwd, params object[] inputs) => JsonSerializer.Serialize(new
+    {
+        type = "assistant",
+        uuid = $"t-{minute}",
+        sessionId = session,
+        cwd,
+        timestamp = T0.AddMinutes(minute).ToString("O"),
+        message = new { role = "assistant", content = inputs.Select(i => new { type = "tool_use", name = "Tool", input = i }).ToArray() },
+    });
+
+    [Fact]
+    public void Tool_paths_are_read_from_file_tools_and_shell_moves_and_made_full()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Write("s1.jsonl",
+            Typed("s1", "u1", 1, "look around", cwd: "/srv/code/app"),
+            Tools("s1", 2, "/srv/code/app",
+                new { file_path = "/srv/other/file.cs" },
+                new { path = "src/lib" },
+                new { command = "ls; cd ~/elsewhere/repo && make" },
+                new { command = "git -C /opt/thing status" },
+                new { command = "echo cd is not a move here" }));
+
+        var session = Assert.Single(ClaudeCodeTranscripts.Read(_sessions));
+
+        Assert.Equal(
+            new[] { "/srv/other/file.cs", "/srv/code/app/src/lib", Path.Combine(home, "elsewhere/repo"), "/opt/thing" }.Order(StringComparer.Ordinal),
+            session.ToolPaths.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_session_whose_tools_worked_in_an_excluded_folder_stays_out()
+    {
+        Write("s1.jsonl",
+            Typed("s1", "u1", 1, "fix the failing test over there"),
+            Tools("s1", 2, "/home/someone/code/example-app", new { file_path = "/home/someone/private/thing/Test.cs" }),
+            Typed("s1", "u2", 3, "and commit it"));
+        Write("s2.jsonl", Typed("s2", "u3", 1, "make the exporter faster"),
+            Tools("s2", 2, "/home/someone/code/example-app", new { command = "cat /home/someone/private-notes.txt" }));
+
+        var (_, output, _) = await Import(null, "claude-code", _sessions, "--exclude", "/home/someone/private", "--confirm");
+
+        Assert.Contains("1 excluded", output, StringComparison.Ordinal);
+        Assert.Equal(["make the exporter faster"], Rows().Select(r => (string)r["prompt"]!));
+    }
+
+    [Fact]
+    public async Task Forget_imported_undoes_an_import_and_keeps_live_rows()
+    {
+        var live = new EnhanceResponse("a live prompt", false, null, null, "", null, "req-live", false);
+        await _stores.ForUser("owner").RecordAsync(RequestRow.From(new EnhanceRequest("a live prompt", new EnhanceContext(Client: "claude-code")), live, T0), CancellationToken.None);
+        Write("s1.jsonl", Typed("s1", "u1", 1, "make the parser accept tabs"), Typed("s1", "u2", 2, "thanks"));
+        await Import(null, "claude-code", _sessions, "--confirm");
+
+        var (output, error) = (new StringWriter(), new StringWriter());
+        var code = await Commands.ForgetAsync(["--imported", "--confirm"], _stores.AdminFor("owner"), output, error, CancellationToken.None);
+
+        Assert.Equal((Commands.Ok, "Deleted 2 requests.\n"), (code, output.ToString()));
+        Assert.Equal(["req-live"], Rows().Select(r => (string)r["request_id"]!));
+    }
+
     [Fact]
     public async Task A_session_with_a_prompt_matching_the_excluded_text_stays_out_whole()
     {

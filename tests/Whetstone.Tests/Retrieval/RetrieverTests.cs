@@ -252,4 +252,27 @@ public sealed class RetrieverTests : IAsyncDisposable
         var health = JsonDocument.Parse(await http.GetStringAsync(new Uri("/health", UriKind.Relative))).RootElement;
         Assert.Equal(0, health.GetProperty("retrieval_failures").GetInt64());
     }
+
+    [Fact]
+    public async Task A_prompt_shorter_than_the_minimum_gets_the_inner_answer_and_no_lookup()
+    {
+        var index = OneGood(Earlier("req-1", "add retry and backoff to the upload client, with a cap on attempts"));
+
+        var answer = await Ask(Over(index, new RetrievalOptions(1.0, MinPromptChars: 40)), "retry the upload");
+
+        Assert.False(answer.Changed);
+        Assert.Empty(index.Searched);
+    }
+
+    [Fact]
+    public async Task A_candidate_shorter_than_the_minimum_is_passed_over_for_a_longer_one()
+    {
+        var shortOne = Earlier("req-short", "retry upload", relevance: 9);
+        var longOne = Earlier("req-long", "add retry and backoff to the upload client, with a cap on attempts", relevance: 5);
+        var index = new FakeIndex([("review", 0.9)], [shortOne, longOne]);
+
+        var answer = await Ask(Over(index, new RetrievalOptions(1.0, MinPromptChars: 30)), "make the upload client retry failed parts with backoff");
+
+        Assert.Equal("req-long", answer.SourceRequestId);
+    }
 }

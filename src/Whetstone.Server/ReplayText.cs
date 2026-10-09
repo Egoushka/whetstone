@@ -17,6 +17,8 @@ internal static partial class ReplayText
         text.Append(CultureInfo.InvariantCulture, $"{report.Total} requests, {report.Scored} scored, {report.Eligible} eligible to be retrieved\n");
         text.Append("(eligible: scored, not model-overridden, at or above the median score of its task kind; fewer than ");
         text.Append(CultureInfo.InvariantCulture, $"{Eligibility.MinScoredForKind} scored of a kind uses the overall median)\n");
+        if (report.MinPromptChars > 0)
+            text.Append(CultureInfo.InvariantCulture, $"(only prompts of at least {report.MinPromptChars} characters, on both sides)\n");
         if (report.Pairs.Count == 0)
             return text.Append("\nNothing is scored yet, so there is nothing to replay.\n").ToString();
         text.Append("\nFor each scored request: relevance (BM25, higher is closer), then the request (its score) and the best earlier match.\n");

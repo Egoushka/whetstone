@@ -26,7 +26,7 @@ dotnet run --project src/Whetstone.Server -- import claude-code <sessions-dir> -
                                                                                         # past prompts, each scored by what came next
 ```
 
-Retrieval is off. `WHETSTONE_RETRIEVAL=on` with `WHETSTONE_RETRIEVAL_MIN_SCORE=<n>` (read it off `whetstone replay`) makes `enhance` append the closest earlier prompt of yours that was scored well, quoted after your prompt; no match, no scored prompt or any failure gives your prompt back unchanged.
+Retrieval is off. `WHETSTONE_RETRIEVAL=on` with `WHETSTONE_RETRIEVAL_MIN_SCORE=<n>` (read it off `whetstone replay`) makes `enhance` append the closest earlier prompt of yours that was scored well, quoted after your prompt (`WHETSTONE_RETRIEVAL_MIN_CHARS` leaves short follow-ups out on both sides; try it with `whetstone replay --min-chars N`); no match, no scored prompt or any failure gives your prompt back unchanged.
 
 Over HTTP every MCP request needs `Authorization: Bearer <WHETSTONE_API_KEY>`; `GET /health` needs none.
 

@@ -12,9 +12,9 @@ const string Usage = """
                                             the bearer key is read from WHETSTONE_API_KEY
       export [--repository R] [--before DATE] [--text REGEX]
                                             everything stored for you, as JSON lines (export/v1) on stdout
-      replay                                for each scored request, the earlier one that best matches it (reads only)
+      replay [--min-chars N]                for each scored request, the earlier one that best matches it (reads only)
       reindex                               upgrade an older store file and rebuild its search index
-      forget (--all | [--repository R] [--before DATE] [--text REGEX]) [--confirm]
+      forget (--all | [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
       import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]
                                             counts the prompts typed in past sessions under DIR; with --confirm,
@@ -48,7 +48,14 @@ if (Environment.GetEnvironmentVariable("WHETSTONE_RETRIEVAL") is "on")
         Console.Error.WriteLine("whetstone: WHETSTONE_RETRIEVAL=on needs WHETSTONE_RETRIEVAL_MIN_SCORE, a number above 0 (see `whetstone replay`)");
         return 2;
     }
-    enhancer = new Retriever(enhancer, stores.IndexFor(user), new RetrievalOptions(minRelevance));
+    var minChars = 0;
+    if (Environment.GetEnvironmentVariable("WHETSTONE_RETRIEVAL_MIN_CHARS") is { Length: > 0 } chars
+        && !int.TryParse(chars, NumberStyles.None, CultureInfo.InvariantCulture, out minChars))
+    {
+        Console.Error.WriteLine("whetstone: WHETSTONE_RETRIEVAL_MIN_CHARS is a whole number of characters");
+        return 2;
+    }
+    enhancer = new Retriever(enhancer, stores.IndexFor(user), new RetrievalOptions(minRelevance, minChars));
 }
 // The reason is an exception type: a message may quote a prompt.
 var store = new GuardedStore(stores.ForUser(user), reason => Console.Error.WriteLine($"whetstone: could not store a request ({reason})"));
