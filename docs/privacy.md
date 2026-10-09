@@ -14,6 +14,7 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |
 | prompts typed in past sessions, imported by the owner, each with an implicit score | 0.7 | until deleted |
+| prompts agents and orchestrators wrote in past sessions (subagent tasks, page-extraction questions, orchestrator turns), imported by the owner, each with the run measures the transcript recorded | 0.4 | until deleted |
 
 Nothing else: no file contents, no model answers, no other users' data.
 
@@ -38,7 +39,9 @@ Nothing else: no file contents, no model answers, no other users' data.
   template written from a forgotten prompt is rebuilt or dropped.
 - **Import is the owner's act.** `whetstone import` reads past session transcripts from a folder the owner names and stores
   only the prompts a person typed, redacted like live ones, with a score derived from what came next (no model call). It
-  stores nothing until `--confirm`. `--exclude` and `--exclude-text` keep whole sessions out by folder or by content, and
+  stores nothing until `--confirm`. Prompts agents wrote for subagents, page extractions and orchestrators are stored the same
+  way, under the same exclusions; they often quote file contents, which is why a session left out by folder, by the paths
+  its tools touched or by text keeps these out as well. `--exclude` and `--exclude-text` keep whole sessions out by folder or by content, and
   `forget --text` removes stored rows by content. Message and session ids from the transcript are not stored.
 - **Outbound calls.** The only outbound call is to the rewriting model the user configures (goal 0.6), and only the
   redacted prompt and the chosen template are sent.
