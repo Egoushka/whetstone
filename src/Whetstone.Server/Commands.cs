@@ -21,7 +21,7 @@ public static class Commands
 
     public const string ExportUsage = "usage: whetstone export [--repository R] [--before DATE] [--text REGEX]";
 
-    public const string ForgetUsage = "usage: whetstone forget (--all | [--repository R] [--before DATE] [--text REGEX]) [--confirm]";
+    public const string ForgetUsage = "usage: whetstone forget (--all | [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]";
 
     /// <summary>One <c>export/v1</c> record per line on <paramref name="output"/>, oldest first. Nothing else goes there.</summary>
     public static async Task<int> ExportAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
@@ -62,7 +62,7 @@ public static class Commands
         }
     }
 
-    public const string ReplayUsage = "usage: whetstone replay";
+    public const string ReplayUsage = "usage: whetstone replay [--min-chars N]";
 
     /// <summary>
     /// Reads your store and prints, for each scored request, the earlier request that best matches it and the match's score, then how
@@ -71,14 +71,17 @@ public static class Commands
     /// </summary>
     public static async Task<int> ReplayAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
     {
-        if (options.Count > 0)
-            return Refuse(error, $"unknown option '{options[0]}'", ReplayUsage);
+        if (!Parse(options, ["--min-chars"], [], out var parsed, out var problem))
+            return Refuse(error, problem!, ReplayUsage);
+        var minChars = 0;
+        if (parsed!.TryGetValue("--min-chars", out var text) && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out minChars)))
+            return Refuse(error, "--min-chars takes a whole number of characters", ReplayUsage);
         try
         {
             var rows = new List<ExportRecord>();
             await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
                 rows.Add(record);
-            var report = Replay.Run(rows);
+            var report = Replay.Run(rows, minChars);
             await output.WriteAsync(ReplayText.Format(report));
             return Ok;
         }
@@ -130,14 +133,14 @@ public static class Commands
     /// <summary>Counts what matches and stops, until <c>--confirm</c> is given; then deletes it and reports how many went.</summary>
     public static async Task<int> ForgetAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
     {
-        if (!Parse(options, ["--repository", "--before", "--text"], ["--all", "--confirm"], out var parsed, out var problem))
+        if (!Parse(options, ["--repository", "--before", "--text"], ["--all", "--confirm", "--imported"], out var parsed, out var problem))
             return Refuse(error, problem!, ForgetUsage);
         var all = parsed!.ContainsKey("--all");
-        var filtered = parsed.ContainsKey("--repository") || parsed.ContainsKey("--before") || parsed.ContainsKey("--text");
+        var filtered = parsed.ContainsKey("--repository") || parsed.ContainsKey("--before") || parsed.ContainsKey("--text") || parsed.ContainsKey("--imported");
         if (all && filtered)
             return Refuse(error, "--all cannot be combined with a filter", ForgetUsage);
         if (!all && !filtered)
-            return Refuse(error, "say what to forget: --all, --repository, --before or --text", ForgetUsage);
+            return Refuse(error, "say what to forget: --all, --repository, --before, --text or --imported", ForgetUsage);
         if (!Filter(parsed, out var filter, out problem))
             return Refuse(error, problem!, ForgetUsage);
         try
@@ -190,7 +193,7 @@ public static class Commands
         Regex? matching = null;
         if (parsed.TryGetValue("--text", out var pattern) && !TryRegex(pattern, out matching, out problem))
             return false;
-        filter = new RowFilter(parsed.GetValueOrDefault("--repository"), before, matching);
+        filter = new RowFilter(parsed.GetValueOrDefault("--repository"), before, matching, parsed.ContainsKey("--imported"));
         return true;
     }
 

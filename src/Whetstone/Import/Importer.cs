@@ -15,13 +15,17 @@ public interface IRepositoryHistory
     bool CommittedBetween(string workingDirectory, DateTimeOffset since, DateTimeOffset until);
 }
 
-/// <summary>Sessions an import leaves out: those under any of <paramref name="Directories"/>, and those with a prompt matching <paramref name="Text"/>.</summary>
+/// <summary>
+/// Sessions an import leaves out: those that started under any of <paramref name="Directories"/> or whose tools opened, edited,
+/// searched or moved into one, and those with a prompt matching <paramref name="Text"/>.
+/// </summary>
 public sealed record ImportExclusions(IReadOnlyList<string> Directories, System.Text.RegularExpressions.Regex? Text = null)
 {
     public static readonly ImportExclusions None = new([]);
 
     public bool Exclude(TranscriptSession session) =>
-        Directories.Any(prefix => Importer.Under(session.WorkingDirectory, prefix)) || (Text is { } text && session.Prompts.Any(p => text.IsMatch(p.Text)));
+        Directories.Any(prefix => Importer.Under(session.WorkingDirectory, prefix) || session.ToolPaths.Any(path => Importer.Under(path, prefix)))
+        || (Text is { } text && session.Prompts.Any(p => text.IsMatch(p.Text)));
 }
 
 /// <summary>Counts for one import; with <c>Written</c> false nothing was stored.</summary>

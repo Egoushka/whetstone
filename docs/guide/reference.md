@@ -14,9 +14,9 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 | `mcp` | The MCP tools over stdio, for a client that starts whetstone itself |
 | `serve [--listen ADDR] [--port N]` | MCP over HTTP at `/v1/mcp`, and `GET /health` |
 | `export [--repository R] [--before DATE]` | Everything stored for you, as JSON lines, oldest first |
-| `forget (--all \| [--repository R] [--before DATE] [--text REGEX]) [--confirm]` | Counts what matches; with `--confirm`, deletes it |
+| `forget (--all \| [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]` | Counts what matches; with `--confirm`, deletes it |
 | `import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]` | Counts the prompts typed in past sessions under DIR; with `--confirm`, stores them with an implicit score |
-| `replay` | For each scored request, the earlier one that best matches it, and how many rows are eligible; reads only |
+| `replay [--min-chars N]` | For each scored request, the earlier one that best matches it, and how many rows are eligible; reads only |
 | `reindex` | Upgrades an older store file and rebuilds its search index |
 
 ### serve
@@ -37,7 +37,7 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 
 ### import
 
-Reads every `*.jsonl` file under DIR, at any depth, as Claude Code session transcripts, and keeps what a person typed. Each prompt is scored by the next one in its session and by whether its repository got a commit from the configured git user during the session; the rules, the duplicates and the ids are in [the design](../specs/2026-10-09-it-imports-design.md). `--exclude` drops sessions that started under a folder; `--exclude-text` drops sessions with any prompt that matches. Without `--confirm` it prints `N sessions read, M excluded; P typed prompts: X new, Y already stored by a live client, Z imported before.` and stores nothing.
+Reads every `*.jsonl` file under DIR, at any depth, as Claude Code session transcripts, and keeps what a person typed. Each prompt is scored by the next one in its session and by whether its repository got a commit from the configured git user during the session; the rules, the duplicates and the ids are in [the design](../specs/2026-10-09-it-imports-design.md). `--exclude` drops sessions that started under a folder or whose tools worked in it; `--exclude-text` drops sessions with any prompt that matches. Without `--confirm` it prints `N sessions read, M excluded; P typed prompts: X new, Y already stored by a live client, Z imported before.` and stores nothing.
 
 ### Exit codes
 
@@ -54,6 +54,7 @@ Reads every `*.jsonl` file under DIR, at any depth, as Claude Code session trans
 | `WHETSTONE_API_KEY` | none | `serve`; required |
 | `WHETSTONE_USER` | `owner` | every command; 1 to 64 of `a-z`, `0-9`, `_`, `-` |
 | `WHETSTONE_DATA_DIR` | `whetstone` under the local application data directory | every command |
+| `WHETSTONE_RETRIEVAL_MIN_CHARS` | `0` | `serve` and `mcp` with retrieval on: prompts shorter than this are neither answered with a retrieval nor retrieved; read it off `replay --min-chars` |
 
 The store is `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db`. `export` and `forget` for a user with no store print nothing or delete nothing, and create no file ([CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs)).
 

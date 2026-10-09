@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Whetstone.Import;
 
@@ -7,14 +8,28 @@ namespace Whetstone.Import;
 public sealed record TypedPrompt(string MessageId, DateTimeOffset At, string Text);
 
 /// <summary>One session's typed prompts in order, its working directory, and when anything last happened in it.</summary>
-public sealed record TranscriptSession(string SessionId, string WorkingDirectory, IReadOnlyList<TypedPrompt> Prompts, DateTimeOffset LastActivity);
+/// <param name="ToolPaths">Every path the session's tools opened, edited or searched, or a shell command moved into, as full paths.</param>
+public sealed record TranscriptSession(
+    string SessionId, string WorkingDirectory, IReadOnlyList<TypedPrompt> Prompts, DateTimeOffset LastActivity, IReadOnlySet<string> ToolPaths)
+{
+    public TranscriptSession(string sessionId, string workingDirectory, IReadOnlyList<TypedPrompt> prompts, DateTimeOffset lastActivity)
+        : this(sessionId, workingDirectory, prompts, lastActivity, new HashSet<string>(StringComparer.Ordinal))
+    {
+    }
+}
 
 /// <summary>
 /// Reads Claude Code session transcripts (one JSON object per line, one file per session) and keeps only what a person typed. The
 /// format is the client's own and undocumented, so a line that does not parse or lacks a field is skipped, never an error.
 /// </summary>
-public static class ClaudeCodeTranscripts
+public static partial class ClaudeCodeTranscripts
 {
+    private static readonly string[] PathInputs = ["file_path", "path", "notebook_path"];
+
+    // A shell command that moves into a folder or runs git in one: `cd D`, `pushd D`, `git -C D`.
+    [GeneratedRegex(@"(?:^|[;&|(]\s*)(?:cd|pushd)\s+[""']?([^\s""';&|)]+)|\bgit\s+-C\s+[""']?([^\s""';&|)]+)", RegexOptions.CultureInvariant)]
+    private static partial Regex Moves();
+
     /// <summary>Longest prompt read; a longer one is pasted output, not a request.</summary>
     public const int MaxPromptChars = 500_000;
 
@@ -22,13 +37,20 @@ public static class ClaudeCodeTranscripts
     public static IReadOnlyList<TranscriptSession> Read(string directory)
     {
         var sessions = new Dictionary<string, (string Cwd, Dictionary<string, TypedPrompt> Prompts, DateTimeOffset Last)>(StringComparer.Ordinal);
+        var paths = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(directory, "*.jsonl", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
         {
             foreach (var line in File.ReadLines(file))
             {
                 if (!TryParse(line, out var entry))
                     continue;
-                var (sessionId, cwd, at, prompt) = entry;
+                var (sessionId, cwd, at, prompt, touched) = entry;
+                if (touched.Count > 0)
+                {
+                    if (!paths.TryGetValue(sessionId, out var known))
+                        paths[sessionId] = known = new HashSet<string>(StringComparer.Ordinal);
+                    known.UnionWith(touched);
+                }
                 if (!sessions.TryGetValue(sessionId, out var session))
                     session = (cwd, new Dictionary<string, TypedPrompt>(StringComparer.Ordinal), at);
                 if (prompt is not null)
@@ -38,13 +60,17 @@ public static class ClaudeCodeTranscripts
         }
         return sessions
             .Where(s => s.Value.Prompts.Count > 0)
-            .Select(s => new TranscriptSession(s.Key, s.Value.Cwd, [.. s.Value.Prompts.Values.OrderBy(p => p.At).ThenBy(p => p.MessageId, StringComparer.Ordinal)], s.Value.Last))
+            .Select(s => new TranscriptSession(s.Key, s.Value.Cwd, [.. s.Value.Prompts.Values.OrderBy(p => p.At).ThenBy(p => p.MessageId, StringComparer.Ordinal)], s.Value.Last,
+                paths.TryGetValue(s.Key, out var touched) ? touched : new HashSet<string>(StringComparer.Ordinal)))
             .OrderBy(s => s.Prompts[0].At)
             .ToList();
     }
 
-    /// <summary>Any line with a session, a directory and a time counts as activity; only a typed prompt yields a prompt.</summary>
-    internal static bool TryParse(string line, out (string SessionId, string Cwd, DateTimeOffset At, TypedPrompt? Prompt) entry)
+    /// <summary>
+    /// Any line with a session, a directory and a time counts as activity; only a typed prompt yields a prompt, and only an assistant
+    /// line with tool calls yields paths.
+    /// </summary>
+    internal static bool TryParse(string line, out (string SessionId, string Cwd, DateTimeOffset At, TypedPrompt? Prompt, IReadOnlyList<string> Paths) entry)
     {
         entry = default;
         JsonDocument document;
@@ -63,8 +89,47 @@ public static class ClaudeCodeTranscripts
             || String(root, "cwd") is not { Length: > 0 } cwd
             || !DateTimeOffset.TryParse(String(root, "timestamp"), System.Globalization.CultureInfo.InvariantCulture, out var at))
             return false;
-        entry = (sessionId, cwd, at, Typed(root, at));
+        entry = (sessionId, cwd, at, Typed(root, at), ToolPathsOf(root, cwd));
         return true;
+    }
+
+    private static List<string> ToolPathsOf(JsonElement root, string cwd)
+    {
+        var found = new List<string>();
+        if (String(root, "type") != "assistant" || !root.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object
+            || !message.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+            return found;
+        foreach (var part in content.EnumerateArray())
+        {
+            if (part.ValueKind != JsonValueKind.Object || String(part, "type") != "tool_use" || !part.TryGetProperty("input", out var input)
+                || input.ValueKind != JsonValueKind.Object)
+                continue;
+            foreach (var name in PathInputs)
+                if (String(input, name) is { Length: > 0 } path)
+                    found.Add(Full(path, cwd));
+            if (String(input, "command") is { Length: > 0 } command)
+                foreach (Match move in Moves().Matches(command))
+                    found.Add(Full(move.Groups[1].Success ? move.Groups[1].Value : move.Groups[2].Value, cwd));
+        }
+        return found;
+    }
+
+    /// <summary>A path as written in a tool call, made full: <c>~</c> and <c>$HOME</c> expanded, a relative one taken from the session's directory.</summary>
+    internal static string Full(string path, string cwd)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (path == "~" || path.StartsWith("~/", StringComparison.Ordinal))
+            path = home + path[1..];
+        else if (path.StartsWith("$HOME", StringComparison.Ordinal))
+            path = home + path["$HOME".Length..];
+        try
+        {
+            return Path.GetFullPath(path, cwd);
+        }
+        catch (ArgumentException)
+        {
+            return path;
+        }
     }
 
     private static TypedPrompt? Typed(JsonElement root, DateTimeOffset at)

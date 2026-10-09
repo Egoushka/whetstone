@@ -13,7 +13,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     /// <summary>The prefix of every id an import gives a past prompt (Whetstone.Import.Importer).</summary>
     public const string ImportedPrefix = "imp-";
 
-    private const string Where = "WHERE ($repository IS NULL OR repository = $repository) AND ($before IS NULL OR created_at < $before) AND ($text IS NULL OR prompt_matches(prompt))";
+    private const string Where = "WHERE ($repository IS NULL OR repository = $repository) AND ($before IS NULL OR created_at < $before) AND ($text IS NULL OR prompt_matches(prompt)) AND ($imported IS NULL OR substr(request_id, 1, length($imported)) = $imported)";
 
     public async Task<int> CountAsync(RowFilter filter, CancellationToken ct)
     {
@@ -154,6 +154,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.Parameters.AddWithValue("$repository", (object?)filter.Repository ?? DBNull.Value);
         command.Parameters.AddWithValue("$before", (object?)filter.BeforeText ?? DBNull.Value);
         command.Parameters.AddWithValue("$text", filter.Text is null ? DBNull.Value : 1);
+        command.Parameters.AddWithValue("$imported", filter.Imported ? ImportedPrefix : DBNull.Value);
         // SQLite has no regular expressions; the filter's own expression runs in .NET, row by row.
         var text = filter.Text;
         command.Connection!.CreateFunction("prompt_matches", (string prompt) => text is not null && text.IsMatch(prompt), isDeterministic: true);

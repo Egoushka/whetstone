@@ -140,4 +140,41 @@ public sealed class ReplayTests
         Assert.Equal(Commands.Usage, code);
         Assert.Contains(Commands.ReplayUsage, error.ToString(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void A_minimum_length_leaves_short_requests_out_on_both_sides_but_not_out_of_the_median()
+    {
+        var rows = new[]
+        {
+            Row("long-good", "add retry and backoff to the upload client with a cap", 0.9),
+            Row("long-query", "the upload client needs retry with backoff and a cap", 0.8),
+            Row("short-good", "upload retry", 0.95),
+            Row("short-low", "upload", 0.1),
+        };
+
+        var report = Replay.Run(rows, minPromptChars: 30);
+
+        Assert.Equal(2, report.Scored);
+        Assert.Equal(["long-good"], Eligibility.Eligible(rows).Where(r => r.Prompt.Length >= 30).Select(r => r.RequestId));
+        Assert.Equal(1, report.Eligible);
+        Assert.All(report.Pairs, p => Assert.True(p.Query.Prompt.Length >= 30));
+        Assert.Equal("long-good", report.Pairs.Single(p => p.Query.RequestId == "long-query").Match?.RequestId);
+    }
+
+    [Theory]
+    [InlineData("--min-chars")]
+    [InlineData("--min-chars", "many")]
+    [InlineData("--min-chars", "-5")]
+    [InlineData("--all")]
+    public async Task A_bad_replay_option_is_a_usage_error(params string[] options)
+    {
+        using var data = new TempData();
+        using var stores = new SqliteStores(data.Path);
+        var error = new StringWriter();
+
+        var code = await Commands.ReplayAsync(options, stores.AdminFor("owner"), new StringWriter(), error, CancellationToken.None);
+
+        Assert.Equal(Commands.Usage, code);
+        Assert.Contains(Commands.ReplayUsage, error.ToString(), StringComparison.Ordinal);
+    }
 }
