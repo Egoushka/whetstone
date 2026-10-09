@@ -25,10 +25,10 @@ section: "Project"
 | `replay`: the best earlier match for each scored request, and how many are eligible | works | [ReplayTests.cs](../../tests/Whetstone.Tests/Retrieval/ReplayTests.cs) |
 | A full-text index kept in step with the store, and `reindex` | works | [IndexTests.cs](../../tests/Whetstone.Tests/Storage/IndexTests.cs) |
 | Retrieval of your best past prompt, off by default | works | [RetrieverTests.cs](../../tests/Whetstone.Tests/Retrieval/RetrieverTests.cs) |
-| Retrieval in real use, 50 rewrites at 40% acceptance (the 0.3 bar) | not yet | [docs/evaluation.md](../evaluation.md) |
-| A held-out share and a report (0.4) | not yet | [ROADMAP.md](../../ROADMAP.md) |
-| Templates, versioned (0.5) | not yet | [ROADMAP.md](../../ROADMAP.md) |
-| An optional model rewrite (0.6) | not yet | [ROADMAP.md](../../ROADMAP.md) |
+| Retrieval in real use, 50 rewrites at 40% acceptance (the 0.3 bar) | not pursued | [ADR 0004](../adr/0004-every-prompt-templates-and-trials.md) |
+| Agent-written prompts captured with run measures (0.4) | not yet | [the design](../specs/2026-10-10-templates-everywhere-design.md) |
+| Templates per kind and trials (0.5) | not yet | [the design](../specs/2026-10-10-templates-everywhere-design.md) |
+| Challengers written by a model (0.6) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | Import of Claude Code sessions with an implicit score | works | [ImportTests.cs](../../tests/Whetstone.Tests/Import/ImportTests.cs) |
 | Removing stored prompts by content (`forget --text`) | works | [CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs) |
 | Import from other agents and from a memory service (rest of 0.7) | not yet | [ROADMAP.md](../../ROADMAP.md) |
