@@ -31,4 +31,9 @@ public sealed record EnhanceResponse(
     string? TaskKind,
     string RequestId,
     bool HeldOut,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRequestId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRequestId = null)
+{
+    /// <summary>Which arm this answer was (<c>champion</c>, <c>challenger</c>, <c>held_out</c>); kept in the store, not sent to the client.</summary>
+    [JsonIgnore]
+    public string? Arm { get; init; }
+}

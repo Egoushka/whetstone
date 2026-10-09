@@ -17,6 +17,7 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 | `forget (--all \| [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]` | Counts what matches; with `--confirm`, deletes it |
 | `import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]` | Counts the prompts typed in past sessions under DIR; with `--confirm`, stores them with an implicit score |
 | `replay [--min-chars N]` | For each scored request, the earlier one that best matches it, and how many rows are eligible; reads only |
+| `report` | Per kind in a template trial: runs per arm, completion, median cost and duration, the split check and what the promotion rule says; reads only |
 | `reindex` | Upgrades an older store file and rebuilds its search index |
 
 ### serve
@@ -28,6 +29,14 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 
 > [!WARNING]
 > A `--listen` address that is not loopback stops the process with an unhandled `InvalidOperationException`, because the command line has no way to set the allowed host names that the server then requires ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs), `Listening_beyond_loopback_needs_allowed_hosts` in [HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)). Reach it from another host through a tunnel to the loopback port.
+
+### report
+
+Prints, for each kind that has a template or a request with an arm: the champion and challenger, runs by arm, the counted runs (those with a reported `completed`, since the model last changed) with completion, median cost and median duration, the sample-ratio check against the planned split, the regression monitor (champion against the held-out arm) and, for each look the challenger has reached (30, 60, 100, 150, 200 counted runs), what the promotion rule says. It decides nothing; applying a verdict is the owner's act ([Trials.cs](../../src/Whetstone/Templates/Trials.cs), [ReportTests.cs](../../tests/Whetstone.Tests/Templates/ReportTests.cs)). Cost is tokens weighted 1, 1.25, 0.1 and 5 for input, cache write, cache read and output, and is left out of a run missing any of the four counts.
+
+### Templates and arms
+
+With `WHETSTONE_TEMPLATES=on`, `serve` and `mcp` seed the shipped templates, the agent brief completer: for subagent kinds a report format, a stop rule with a 300-word cap and, for read-only kinds (`agent/explore`, `agent/plan`, `agent/claude-code-guide`, `agent/box-reader`, `agent/general-purpose/explore`, `agent/general-purpose/research`), a read-only line ([BuiltInTemplates.cs](../../src/Whetstone/Templates/BuiltInTemplates.cs)). A request that sends `context.task_kind` of such a kind gets an arm from a hash of the kind and the request id: champion 90% and held out 10%, or 60, 30 and 10 while a challenger is on trial. The champion's text is added after the prompt, which stays byte for byte; the held-out arm gets the prompt unchanged and `held_out: true`. A kind with no champion is held out entirely; a request with no kind or kind `other` is not an arm. The arm is stored with the request and appears as `answer.arm` in `export`. Templates live in the store's `templates` table, one champion and one challenger per kind at most; there is no command to add a challenger or promote yet. A failing template lookup returns the prompt unchanged and counts as `template_failures` in `/health`.
 
 ### export and forget
 
@@ -56,6 +65,7 @@ It also stores the prompts agents wrote, counted on a second line (`N prompts wr
 | `WHETSTONE_API_KEY` | none | `serve`; required |
 | `WHETSTONE_USER` | `owner` | every command; 1 to 64 of `a-z`, `0-9`, `_`, `-` |
 | `WHETSTONE_DATA_DIR` | `whetstone` under the local application data directory | every command |
+| `WHETSTONE_TEMPLATES` | off | `serve` and `mcp`: `on` seeds the shipped templates and serves them (see "Templates and arms" below); anything else leaves every answer as it was |
 | `WHETSTONE_RETRIEVAL_MIN_CHARS` | `0` | `serve` and `mcp` with retrieval on: prompts shorter than this are neither answered with a retrieval nor retrieved; read it off `replay --min-chars` |
 
 The store is `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db`. `export` and `forget` for a user with no store print nothing or delete nothing, and create no file ([CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs)).
@@ -65,7 +75,7 @@ The store is `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db`. `export` and 
 | Route | Auth | Answer |
 |---|---|---|
 | `POST /v1/mcp` and the rest of the MCP transport | `Authorization: Bearer <key>` | The MCP session |
-| `GET /health` | none | `status`, `version`, `store_failures`, `retrieval_failures`, `uptime_seconds`, `cpu_seconds`, `threads`, `heap_mb`, `committed_mb`, `gen2_collections` ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs)) |
+| `GET /health` | none | `status`, `version`, `store_failures`, `retrieval_failures`, `template_failures`, `uptime_seconds`, `cpu_seconds`, `threads`, `heap_mb`, `committed_mb`, `gen2_collections` ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs)) |
 
 A missing or wrong key gets 401 ([HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)). Request bodies over 1,000,000 bytes are refused.
 

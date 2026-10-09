@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.Data.Sqlite;
 using Whetstone.Contracts;
+using Whetstone.Templates;
 
 namespace Whetstone.Storage;
 
@@ -40,7 +41,8 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             : "NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL";
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
-                   rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures}
+                   rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
+                   {(version >= 4 ? "arm" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -51,7 +53,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             yield return new ExportRecord(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3) != 0,
                 new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7)),
-                new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18)),
+                new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18), Text(reader, 28)),
                 reported is null
                     ? null
                     : new ExportOutcome(Flag(reader, 12), Flag(reader, 13), Number(reader, 14), Number(reader, 15), Text(reader, 16), reported,
@@ -117,6 +119,25 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.Parameters.AddWithValue("$from", (at - within).UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$to", (at + within).UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         return await command.ExecuteScalarAsync(ct) as string;
+    }
+
+    public async Task<IReadOnlyList<TemplateRow>> TemplatesAsync(CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return [];
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        if (version < 4)
+            return [];
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT template_id, version, kind, before_text, after_text, source, role, created_at FROM templates ORDER BY kind, created_at, template_id, version";
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var found = new List<TemplateRow>();
+        while (await reader.ReadAsync(ct))
+            found.Add(new TemplateRow(
+                new Template(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)),
+                reader.GetString(6), DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)));
+        return found;
     }
 
     public async Task<int> ReindexAsync(CancellationToken ct)

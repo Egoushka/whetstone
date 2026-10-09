@@ -5,6 +5,7 @@ using Whetstone.Contracts;
 using Whetstone.Import;
 using Whetstone.Retrieval;
 using Whetstone.Storage;
+using Whetstone.Templates;
 
 namespace Whetstone.Server;
 
@@ -88,6 +89,42 @@ public static class Commands
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
         {
             return Fail(error, "replay", e);
+        }
+    }
+
+    public const string ReportUsage = "usage: whetstone report";
+
+    /// <summary>
+    /// Reads your store and prints, per kind of prompt in a template trial, the runs each arm got, how they went and what the
+    /// promotion rule says (docs/specs/2026-10-10-templates-everywhere-design.md). Changes nothing.
+    /// </summary>
+    public static async Task<int> ReportAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (!Parse(options, [], [], out _, out var problem))
+            return Refuse(error, problem!, ReportUsage);
+        try
+        {
+            var records = new List<ExportRecord>();
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                records.Add(record);
+            var stored = await admin.TemplatesAsync(ct);
+            var current = stored
+                .GroupBy(t => t.Template.Kind, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => new KindTemplates(
+                    g.FirstOrDefault(t => t.Role == TemplateRoles.Champion)?.Template, g.FirstOrDefault(t => t.Role == TemplateRoles.Challenger)?.Template), StringComparer.Ordinal);
+            var runs = records.Where(r => r.Context.TaskKind is not null)
+                .GroupBy(r => r.Context.TaskKind!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Select(r => TrialRun.From(r, CostWeights.Default)).ToList(), StringComparer.Ordinal);
+            var inTrials = runs.Where(k => current.ContainsKey(k.Key) || k.Value.Any(r => r.Arm is not null)).Select(k => k.Key)
+                .Union(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+            var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None))).ToList();
+            var tracked = reports.Sum(r => r.Runs.Values.Sum());
+            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked));
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "report", e);
         }
     }
 

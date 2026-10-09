@@ -47,6 +47,9 @@ public sealed record RequestRow
     /// <summary>The stored request this one's answer drew on (retrieval, goal 0.3); null for a pass-through.</summary>
     public string? SourceRequestId { get; init; }
 
+    /// <summary>Which arm the answer was (champion, challenger, held_out); null when no template trial applied.</summary>
+    public string? Arm { get; init; }
+
     public static RequestRow From(EnhanceRequest request, EnhanceResponse response, DateTimeOffset at)
     {
         // Redact the whole prompt first and cut after: a cut first could leave half a secret that no pattern matches.
@@ -70,6 +73,7 @@ public sealed record RequestRow
             HeldOut = response.HeldOut,
             Truncated = truncated,
             SourceRequestId = response.SourceRequestId,
+            Arm = response.Arm,
         };
     }
 

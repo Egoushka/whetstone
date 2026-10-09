@@ -5,12 +5,12 @@ namespace Whetstone.Storage;
 
 /// <summary>
 /// The file's tables and how an older file becomes the current one. Version 2 adds <c>source_request_id</c> (which stored request a
-/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. The index holds no text of its own: it points at <c>requests</c>, so a
+/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. The index holds no text of its own: it points at <c>requests</c>, so a
 /// row deleted there is deleted from the index in the same statement, and <c>forget</c> rebuilds it before the file is compacted.
 /// </summary>
 internal static class StoreSchema
 {
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>The oldest file the commands can still read; the server upgrades it on first use.</summary>
     public const int OldestReadable = 1;
@@ -51,9 +51,28 @@ internal static class StoreSchema
           duration_ms INTEGER,
           tool_calls INTEGER,
           asked_again INTEGER,
-          effort TEXT
+          effort TEXT,
+          arm TEXT
         );
         CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
+        """;
+
+    // At most one champion and one challenger per kind, held by the index so no code path can break it. A version's text is never
+    // changed; only its role is.
+    private const string Templates = """
+        CREATE TABLE IF NOT EXISTS templates (
+          template_id TEXT NOT NULL,
+          version TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          before_text TEXT NOT NULL,
+          after_text TEXT NOT NULL,
+          source TEXT NOT NULL,
+          role TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (template_id, version, kind)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS templates_one_champion ON templates (kind) WHERE role = 'champion';
+        CREATE UNIQUE INDEX IF NOT EXISTS templates_one_challenger ON templates (kind) WHERE role = 'challenger';
         """;
 
     // Only an insert and a delete need a trigger: no statement changes a stored prompt. A replaced row (INSERT OR REPLACE) deletes
@@ -94,6 +113,9 @@ internal static class StoreSchema
         if (found is 1 or 2)
             foreach (var (column, type) in Measures)
                 await Run(connection, transaction, $"ALTER TABLE requests ADD COLUMN {column} {type}", ct);
+        if (found is 1 or 2 or 3)
+            await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN arm TEXT", ct);
+        await Run(connection, transaction, Templates, ct);
         await Run(connection, transaction, Index, ct);
         await Run(connection, transaction, RebuildIndex, ct);
         await Run(connection, transaction, $"PRAGMA user_version = {Version}", ct);

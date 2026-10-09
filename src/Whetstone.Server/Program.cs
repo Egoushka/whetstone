@@ -4,6 +4,7 @@ using Whetstone;
 using Whetstone.Retrieval;
 using Whetstone.Server;
 using Whetstone.Storage;
+using Whetstone.Templates;
 
 const string Usage = """
     usage: whetstone <command>
@@ -13,6 +14,8 @@ const string Usage = """
       export [--repository R] [--before DATE] [--text REGEX]
                                             everything stored for you, as JSON lines (export/v1) on stdout
       replay [--min-chars N]                for each scored request, the earlier one that best matches it (reads only)
+      report                                per kind in a template trial: runs per arm, how they went, what the
+                                            promotion rule says (reads only)
       reindex                               upgrade an older store file and rebuild its search index
       forget (--all | [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
@@ -57,6 +60,13 @@ if (Environment.GetEnvironmentVariable("WHETSTONE_RETRIEVAL") is "on")
     }
     enhancer = new Retriever(enhancer, stores.IndexFor(user), new RetrievalOptions(minRelevance, minChars));
 }
+if (Environment.GetEnvironmentVariable("WHETSTONE_TEMPLATES") is "on")
+{
+    // Seeding adds the shipped champions to kinds that have none; a version already stored keeps its role.
+    var templates = stores.TemplatesFor(user);
+    await templates.SeedAsync(BuiltInTemplates.All, TemplateRoles.Champion, cts.Token);
+    enhancer = new TemplateEnhancer(enhancer, templates);
+}
 // The reason is an exception type: a message may quote a prompt.
 var store = new GuardedStore(stores.ForUser(user), reason => Console.Error.WriteLine($"whetstone: could not store a request ({reason})"));
 
@@ -67,6 +77,8 @@ switch (args)
         return await Commands.ExportAsync(exportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["replay", .. var replayOptions]:
         return await Commands.ReplayAsync(replayOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["report", .. var reportOptions]:
+        return await Commands.ReportAsync(reportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["reindex", .. var reindexOptions]:
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:

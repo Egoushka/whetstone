@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
 using Whetstone.Retrieval;
 using Whetstone.Storage;
+using Whetstone.Templates;
 
 namespace Whetstone.Server;
 
@@ -84,7 +85,8 @@ public static class WhetstoneServer
                 status = "ok",
                 version = Version,
                 store_failures = memory.Failures,
-                retrieval_failures = (enhancer as Retriever)?.Failures ?? 0,
+                retrieval_failures = (enhancer as Retriever ?? (enhancer as TemplateEnhancer)?.Inner as Retriever)?.Failures ?? 0,
+                template_failures = (enhancer as TemplateEnhancer)?.Failures ?? 0,
                 uptime_seconds = (long)(DateTime.Now - process.StartTime).TotalSeconds,
                 cpu_seconds = (long)process.TotalProcessorTime.TotalSeconds,
                 threads = process.Threads.Count,
