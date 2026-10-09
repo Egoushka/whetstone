@@ -14,6 +14,9 @@ internal sealed class TempData : IDisposable
 
 internal static class Db
 {
+    /// <summary>The columns <c>feedback</c> run measures are stored in.</summary>
+    public static readonly string[] MeasureColumns = ["completed", "tokens_in", "tokens_out", "cache_read_tokens", "cache_write_tokens", "duration_ms", "tool_calls", "asked_again", "effort"];
+
     public static List<Dictionary<string, object?>> Query(string file, string sql)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());

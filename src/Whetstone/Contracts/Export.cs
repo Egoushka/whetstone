@@ -20,4 +20,15 @@ public sealed record ExportAnswer(
     bool Changed, string? TemplateId, string? TemplateVersion, bool HeldOut,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRequestId = null);
 
-public sealed record ExportOutcome(bool? RewriteAccepted, bool? ModelOverridden, double? Score, double? CostUsd, string? Model, string ReportedAt);
+/// <summary>The run measures are left out when the client did not report them, as the schema has no null there.</summary>
+public sealed record ExportOutcome(
+    bool? RewriteAccepted, bool? ModelOverridden, double? Score, double? CostUsd, string? Model, string ReportedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Completed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? TokensIn = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? TokensOut = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? CacheReadTokens = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? CacheWriteTokens = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ToolCalls = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AskedAgain = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Effort = null);

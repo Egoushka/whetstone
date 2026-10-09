@@ -106,6 +106,24 @@ public sealed record OutcomeRow
 
     public string? Model { get; init; }
 
+    public bool? Completed { get; init; }
+
+    public long? TokensIn { get; init; }
+
+    public long? TokensOut { get; init; }
+
+    public long? CacheReadTokens { get; init; }
+
+    public long? CacheWriteTokens { get; init; }
+
+    public long? DurationMs { get; init; }
+
+    public long? ToolCalls { get; init; }
+
+    public bool? AskedAgain { get; init; }
+
+    public string? Effort { get; init; }
+
     public static OutcomeRow From(FeedbackRequest request, DateTimeOffset at) => new()
     {
         RequestId = request.RequestId,
@@ -115,5 +133,14 @@ public sealed record OutcomeRow
         Score = request.Outcome.Score,
         CostUsd = request.Outcome.CostUsd,
         Model = RequestRow.Clean(request.Outcome.Model),
+        Completed = request.Outcome.Completed,
+        TokensIn = request.Outcome.TokensIn,
+        TokensOut = request.Outcome.TokensOut,
+        CacheReadTokens = request.Outcome.CacheReadTokens,
+        CacheWriteTokens = request.Outcome.CacheWriteTokens,
+        DurationMs = request.Outcome.DurationMs,
+        ToolCalls = request.Outcome.ToolCalls,
+        AskedAgain = request.Outcome.AskedAgain,
+        Effort = RequestRow.Clean(request.Outcome.Effort),
     };
 }

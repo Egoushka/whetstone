@@ -33,6 +33,18 @@ public class ContractTests
         Assert.NotEmpty(ContractSchemas.ValidateExport(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "export", "v1", "examples", name))).RootElement));
 
     [Theory]
+    [MemberData(nameof(FeedbackExamples))]
+    public void Feedback_example_validates_against_the_embedded_schema(string file) =>
+        Assert.Empty(ContractSchemas.ValidateFeedback(JsonDocument.Parse(File.ReadAllText(file)).RootElement));
+
+    [Theory]
+    [InlineData("invalid-score-out-of-range.json")]
+    [InlineData("invalid-negative-tokens.json")]
+    [InlineData("invalid-measure-is-text.json")]
+    public void Invalid_feedback_example_is_refused_by_the_embedded_schema(string name) =>
+        Assert.NotEmpty(ContractSchemas.ValidateFeedback(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "feedback", "v1", "examples", name))).RootElement));
+
+    [Theory]
     [MemberData(nameof(EnhanceExamples))]
     public void Enhance_example_round_trips(string file)
     {

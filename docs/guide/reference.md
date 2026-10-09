@@ -108,6 +108,13 @@ The arguments are [feedback.schema.json](../../schemas/feedback/v1/feedback.sche
 | `outcome.score` | number or null | 0 to 1 |
 | `outcome.cost_usd` | number or null | 0 or more |
 | `outcome.model` | string or null | Redacted before storage |
+| `outcome.completed` | boolean or null | The run the prompt started finished and did not fail |
+| `outcome.tokens_in`, `tokens_out`, `cache_read_tokens`, `cache_write_tokens` | integer or null | 0 or more; input is apart from cache reads and writes, as billed |
+| `outcome.duration_ms`, `outcome.tool_calls` | integer or null | 0 or more |
+| `outcome.asked_again` | boolean or null | The author repeated or corrected the request in the same turn |
+| `outcome.effort` | string or null | The effort the run used; redacted before storage |
+
+The run measures (`completed` to `effort`) came with schema version 3 of the store and are optional within `feedback/v1`. A measure left out is stored as missing, never zero, and a later report for the same request adds the measures it has without erasing one an earlier report gave ([StoreTests.cs](../../tests/Whetstone.Tests/Storage/StoreTests.cs)). `export` writes them inside `outcome`, and leaves out the ones nobody reported.
 
 A score outside 0 to 1 is an error ([HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)).
 

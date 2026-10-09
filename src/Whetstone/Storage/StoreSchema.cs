@@ -5,15 +5,22 @@ namespace Whetstone.Storage;
 
 /// <summary>
 /// The file's tables and how an older file becomes the current one. Version 2 adds <c>source_request_id</c> (which stored request a
-/// retrieval drew on) and a full-text index over the prompt. The index holds no text of its own: it points at <c>requests</c>, so a
+/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. The index holds no text of its own: it points at <c>requests</c>, so a
 /// row deleted there is deleted from the index in the same statement, and <c>forget</c> rebuilds it before the file is compacted.
 /// </summary>
 internal static class StoreSchema
 {
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>The oldest file the commands can still read; the server upgrades it on first use.</summary>
     public const int OldestReadable = 1;
+
+    /// <summary>The columns version 3 added, for a file that predates them.</summary>
+    private static readonly (string Column, string Type)[] Measures =
+    [
+        ("completed", "INTEGER"), ("tokens_in", "INTEGER"), ("tokens_out", "INTEGER"), ("cache_read_tokens", "INTEGER"),
+        ("cache_write_tokens", "INTEGER"), ("duration_ms", "INTEGER"), ("tool_calls", "INTEGER"), ("asked_again", "INTEGER"), ("effort", "TEXT"),
+    ];
 
     private const string Requests = """
         CREATE TABLE IF NOT EXISTS requests (
@@ -35,7 +42,16 @@ internal static class StoreSchema
           cost_usd REAL,
           model TEXT,
           feedback_at TEXT,
-          source_request_id TEXT
+          source_request_id TEXT,
+          completed INTEGER,
+          tokens_in INTEGER,
+          tokens_out INTEGER,
+          cache_read_tokens INTEGER,
+          cache_write_tokens INTEGER,
+          duration_ms INTEGER,
+          tool_calls INTEGER,
+          asked_again INTEGER,
+          effort TEXT
         );
         CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
         """;
@@ -75,6 +91,9 @@ internal static class StoreSchema
         await Run(connection, transaction, Requests, ct);
         if (found == 1)
             await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN source_request_id TEXT", ct);
+        if (found is 1 or 2)
+            foreach (var (column, type) in Measures)
+                await Run(connection, transaction, $"ALTER TABLE requests ADD COLUMN {column} {type}", ct);
         await Run(connection, transaction, Index, ct);
         await Run(connection, transaction, RebuildIndex, ct);
         await Run(connection, transaction, $"PRAGMA user_version = {Version}", ct);
