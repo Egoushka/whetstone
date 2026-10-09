@@ -15,6 +15,8 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 | `serve [--listen ADDR] [--port N]` | MCP over HTTP at `/v1/mcp`, and `GET /health` |
 | `export [--repository R] [--before DATE]` | Everything stored for you, as JSON lines, oldest first |
 | `forget (--all \| --repository R \| --before DATE) [--confirm]` | Counts what matches; with `--confirm`, deletes it |
+| `replay` | For each scored request, the earlier one that best matches it, and how many rows are eligible; reads only |
+| `reindex` | Upgrades an older store file and rebuilds its search index |
 
 ### serve
 
@@ -55,7 +57,7 @@ The store is `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db`. `export` and 
 | Route | Auth | Answer |
 |---|---|---|
 | `POST /v1/mcp` and the rest of the MCP transport | `Authorization: Bearer <key>` | The MCP session |
-| `GET /health` | none | `{"status":"ok","version":"0.1.0","store_failures":N}` |
+| `GET /health` | none | `status`, `version`, `store_failures`, `retrieval_failures`, `uptime_seconds`, `cpu_seconds`, `threads`, `heap_mb`, `committed_mb`, `gen2_collections` ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs)) |
 
 A missing or wrong key gets 401 ([HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)). Request bodies over 1,000,000 bytes are refused.
 

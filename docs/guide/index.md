@@ -25,7 +25,7 @@ One person who runs a coding agent every day and wants an enhancer that is their
 
 ## What it does not do
 
-- It does not rewrite prompts yet. No retrieval, no templates, no model call exist ([ROADMAP.md](../../ROADMAP.md) goals 0.3, 0.5 and 0.6).
+- It does not rewrite prompts. Retrieval, off by default, appends an earlier prompt of yours and leaves yours as it is; no templates and no model call exist ([ROADMAP.md](../../ROADMAP.md) goals 0.3, 0.5 and 0.6).
 - It does not run agents, pick a model, or share prompts between users ([VISION.md](../../VISION.md#what-it-will-not-do)).
 - It has no encryption of its own. The store is a plain SQLite file; disk encryption is yours ([ADR 0003](../adr/0003-memory-store.md)).
 - It has no tool to read or delete your data over MCP. `export` and `forget` are commands you run in a terminal, so no agent can call them ([ADR 0003](../adr/0003-memory-store.md)).
