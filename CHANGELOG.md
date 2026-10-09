@@ -7,6 +7,7 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ### Added
 
+- `scripts/audit-export.toml` allows a git commit hash in a `commit` field, which gitleaks's Sourcegraph rule read as a token in an imported agent prompt; a bare 40-hex string is still a finding. The file uses `[[allowlists]]`, as gitleaks 8.25 and later expect.
 - Template trials (ADR 0004; WHET-31): a template store in the user's file (store schema version 4), arms assigned from a hash of the kind and the request id (champion 90 / held out 10, or 60 / 30 / 10 with a challenger), the agent brief completer as the first champion for subagent kinds, and `answer.arm` in `export/v1`. Off unless `WHETSTONE_TEMPLATES=on`.
 - `whetstone report`: per kind, runs per arm, completion, median cost (tokens weighted by cache and output) and duration, the sample-ratio check, the regression monitor, and what the promotion rule v2 says at each look. It reads only.
 - `whetstone import claude-code` also stores the prompts agents wrote: each `Agent` call's prompt, each `WebFetch` prompt and each turn an orchestrator sent into a session, with the run measures the transcript recorded (completed, duration, tool calls, token counts, model) and a kind by rule (`agent/<type>`, `agent/general-purpose/<job>`, `fetch/extract`, `orchestrator/turn`). The same folder, tool-path and text exclusions apply; the run prints counts of new prompts, those with measures and those with a kind other than `other` (WHET-30).
