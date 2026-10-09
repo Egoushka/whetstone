@@ -27,8 +27,8 @@ and says "not enough data" below 20 per side.
 - 0.4 (every prompt): for one owner's week of use, at least 80% of agent-written prompts get a kind other than `other`,
   and at least 90% of foreground agent runs have run measures stored; the redaction corpus and the export audit pass
   with agent prompts included.
-- 0.5 (trials): one kind completes a trial of at least 30 runs per arm with a held-out share, `whetstone report` shows
-  it, and the promotion rule in docs/specs/2026-10-10-templates-everywhere-design.md decided it.
+- 0.5 (trials): one kind reaches a look of its trial (at least 30 counted runs per arm) with a held-out share,
+  `whetstone report` shows it, and the promotion rule in docs/specs/2026-10-10-templates-everywhere-design.md decided it.
 - 0.6 (challengers): a model-written challenger wins at least one trial against a hand-written champion at equal or
   lower cost, or the model stays off.
 
