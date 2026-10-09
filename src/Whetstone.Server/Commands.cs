@@ -119,9 +119,13 @@ public static class Commands
             await output.WriteAsync(
                 $"{report.Sessions} sessions read, {report.ExcludedSessions} excluded; {report.Prompts} typed prompts: "
                 + $"{report.New} new, {report.Matched} already stored by a live client, {report.Prompts - report.New - report.Matched} imported before.\n");
+            var agent = report.Agent;
+            await output.WriteAsync(
+                $"{agent.Prompts} prompts written by agents and orchestrators: {agent.New} new, {agent.Matched} already stored by a live client, "
+                + $"{agent.Prompts - agent.New - agent.Matched} imported before; {agent.Measured} with run measures, {agent.Prompts - agent.Other} with a kind other than 'other'.\n");
             await output.WriteAsync(write
-                ? $"Stored {report.New} and scored {report.Prompts}.\n"
-                : "Nothing was stored. Add --confirm to store and score them.\n");
+                ? $"Stored {report.New + agent.New} and scored {report.Prompts}, with run measures for {agent.Measured}.\n"
+                : "Nothing was stored. Add --confirm to store them.\n");
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
