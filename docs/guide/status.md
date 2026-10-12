@@ -5,7 +5,7 @@ order: 5
 section: "Project"
 ---
 
-`works` means a test in this repository covers it. `partial` means part of it is untested or incomplete. `not yet` means a document describes it and it is not built. This page describes `main` after version 0.1.0, with the memory store and retrieval still under `Unreleased` in [CHANGELOG.md](../../CHANGELOG.md).
+`works` means a test in this repository covers it. `partial` means part of it is untested or incomplete. `not yet` means a document describes it and it is not built. `met` means a goal's bar in [docs/evaluation.md](../evaluation.md) is met. This page describes `main` at version 0.2.0 ([CHANGELOG.md](../../CHANGELOG.md)).
 
 ## Status
 
@@ -21,13 +21,13 @@ section: "Project"
 | One file per user, owner-only modes | works | [StoreTests.cs](../../tests/Whetstone.Tests/Storage/StoreTests.cs) |
 | `export` and `forget` | works | [CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs) |
 | `scripts/audit-export.sh` | partial | [audit-export.sh](../../scripts/audit-export.sh) |
-| A week of real use with a clean audit (the 0.2 bar) | partial | [docs/evaluation.md](../evaluation.md) |
+| A week of real use with a clean audit (the 0.2 bar) | met | [docs/evaluation.md](../evaluation.md) |
 | `replay`: the best earlier match for each scored request, and how many are eligible | works | [ReplayTests.cs](../../tests/Whetstone.Tests/Retrieval/ReplayTests.cs) |
 | A full-text index kept in step with the store, and `reindex` | works | [IndexTests.cs](../../tests/Whetstone.Tests/Storage/IndexTests.cs) |
 | Retrieval of your best past prompt, off by default | works | [RetrieverTests.cs](../../tests/Whetstone.Tests/Retrieval/RetrieverTests.cs) |
 | Retrieval in real use, 50 rewrites at 40% acceptance (the 0.3 bar) | not pursued | [ADR 0004](../adr/0004-every-prompt-templates-and-trials.md) |
-| Agent-written prompts captured with run measures (0.4) | not yet | [the design](../specs/2026-10-10-templates-everywhere-design.md) |
-| Templates per kind and trials (0.5) | not yet | [the design](../specs/2026-10-10-templates-everywhere-design.md) |
+| Agent-written prompts captured with run measures (0.4) | partial | [AgentImportTests.cs](../../tests/Whetstone.Tests/Import/AgentImportTests.cs), [the design](../specs/2026-10-10-templates-everywhere-design.md) |
+| Templates per kind and trials (0.5) | partial | [TemplateTests.cs](../../tests/Whetstone.Tests/Templates/TemplateTests.cs), [TrialTests.cs](../../tests/Whetstone.Tests/Templates/TrialTests.cs), [ReportTests.cs](../../tests/Whetstone.Tests/Templates/ReportTests.cs) |
 | Challengers written by a model (0.6) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | Import of Claude Code sessions with an implicit score | works | [ImportTests.cs](../../tests/Whetstone.Tests/Import/ImportTests.cs) |
 | Removing stored prompts by content (`forget --text`) | works | [CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs) |
@@ -37,11 +37,11 @@ section: "Project"
 | Serving beyond loopback from the command line | not yet | [Program.cs](../../src/Whetstone.Server/Program.cs) |
 | A release binary or package | not yet | [going-public.md](../going-public.md) |
 
-The audit script is `partial`: the changelog says its author checked it once by hand against an unredacted token, and no automated test runs it ([CHANGELOG.md](../../CHANGELOG.md)). The 0.2 bar is `partial`: the audit over the owner's store found nothing, and the week of use is not over.
+The audit script is `partial`: the changelog says its author checked it once by hand against an unredacted token, and no automated test runs it ([CHANGELOG.md](../../CHANGELOG.md)). The 0.2 bar is `met`: its tests pass, and after a week of the owner's use (2026-10-04 to 2026-10-11) the audit over the owner's store found nothing on 2026-10-12. Goals 0.4 and 0.5 are `partial`: the import and the trials are built and tested, and their bars need live use measured with `whetstone report`.
 
 ## What `enhance` returns
 
-By default, the prompt unchanged: the enhancer is `PassThrough`, and every answer has `changed: false` ([PassThrough.cs](../../src/Whetstone/PassThrough.cs)). With `WHETSTONE_RETRIEVAL=on` and `WHETSTONE_RETRIEVAL_MIN_SCORE` set, the `Retriever` appends your closest earlier prompt that was scored well ([Retriever.cs](../../src/Whetstone/Retrieval/Retriever.cs), [Program.cs](../../src/Whetstone.Server/Program.cs)). Only a row with a `score` can be eligible, so a store whose clients send no score gets the pass-through even with retrieval on. Whether rewrites help is the question [docs/evaluation.md](../evaluation.md) sets up: acceptance, score and cost against a held-out share. That share is goal 0.4, so today there is no evidence that a rewrite helps.
+By default, the prompt unchanged: the enhancer is `PassThrough`, and every answer has `changed: false` ([PassThrough.cs](../../src/Whetstone/PassThrough.cs)). With `WHETSTONE_RETRIEVAL=on` and `WHETSTONE_RETRIEVAL_MIN_SCORE` set, the `Retriever` appends your closest earlier prompt that was scored well ([Retriever.cs](../../src/Whetstone/Retrieval/Retriever.cs), [Program.cs](../../src/Whetstone.Server/Program.cs)). Only a row with a `score` can be eligible, so a store whose clients send no score gets the pass-through even with retrieval on. Whether rewrites help is the question [docs/evaluation.md](../evaluation.md) sets up: acceptance, score and cost against a held-out share. With `WHETSTONE_TEMPLATES=on`, a request whose `task_kind` has a champion template gets the champion, a challenger, or, in the held-out share, the answer it would have had without templates; the arm comes from a hash of the kind and the request id ([TemplateEnhancer.cs](../../src/Whetstone/Templates/TemplateEnhancer.cs)). No trial has reached a look yet, so today there is no evidence that a rewrite helps.
 
 ## Tests and CI
 
