@@ -5,6 +5,8 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-12
+
 ### Added
 
 - `scripts/audit-export.toml` allows a git commit hash in a `commit` field, which gitleaks's Sourcegraph rule read as a token in an imported agent prompt; a bare 40-hex string is still a finding. The file uses `[[allowlists]]`, as gitleaks 8.25 and later expect.
@@ -38,5 +40,6 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 - An MCP server with `enhance` and `feedback` as a pass-through, over stdio (`mcp`) and HTTP (`serve`, bearer key,
   `GET /health`). A slow, blocking or failing enhancer yields the original prompt inside `deadline_ms`.
 
-[Unreleased]: https://github.com/Egoushka/whetstone/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Egoushka/whetstone/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Egoushka/whetstone/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Egoushka/whetstone/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
 ---
 title: "Overview"
-description: "What whetstone is, how a prompt moves through it, what it does not do yet, and where it stands at 0.1.0 plus the unreleased memory store."
+description: "What whetstone is, how a prompt moves through it, what it does not do yet, and where it stands at 0.2.0."
 order: 0
 section: "Get started"
 ---
@@ -33,8 +33,8 @@ One person who runs a coding agent every day and wants an enhancer that is their
 
 ## Where it stands
 
-- Version 0.1.0 is released: the contract and the pass-through. Goal 0.2, the memory store with redaction, export and forget, is merged under `Unreleased` in [CHANGELOG.md](../../CHANGELOG.md) and not yet tagged.
-- [ROADMAP.md](../../ROADMAP.md) marks 0.1 done and 0.2 next. It says a goal is done when its bar in [docs/evaluation.md](../evaluation.md) is met, not when the code merges. The bar for 0.2 includes a week of the owner's use, and no page here claims that is done.
+- Version 0.2.0 is the latest: the contract, the pass-through, and the memory store with redaction, export and forget ([CHANGELOG.md](../../CHANGELOG.md)).
+- [ROADMAP.md](../../ROADMAP.md) marks 0.1 and 0.2 done. It says a goal is done when its bar in [docs/evaluation.md](../evaluation.md) is met, not when the code merges. The bar for 0.2 included a week of the owner's use with a clean export audit; [Status](status.md) gives the evidence.
 - Only the latest commit on `main` is supported ([SECURITY.md](../../SECURITY.md)).
 - The GitHub repository is private until the maintainer decides otherwise ([going-public.md](../going-public.md)).
 

@@ -24,7 +24,7 @@ curl http://127.0.0.1:7340/health
 ```
 
 ```json title="Response"
-{"status":"ok","version":"0.1.0","store_failures":0}
+{"status":"ok","version":"0.2.0","store_failures":0}
 ```
 
 `version` is the assembly version, set once in [Directory.Build.props](../../Directory.Build.props). `store_failures` counts requests whose storage failed since the process started ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs)).
