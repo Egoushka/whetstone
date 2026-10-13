@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+**/bin
+**/obj
+tests
+docs
+data
+TestResults
+.env*
+.private-terms
+CLAUDE.local.md
+*.db
+*.db-*

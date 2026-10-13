@@ -37,6 +37,10 @@ public static class WhetstoneServer
         + "user allows (repository, commit, task_kind, client); show the returned prompt as a diff and send whichever the user "
         + "picks. If enhance is slow or fails, send the original. After the run, call feedback with the request_id and the outcome.";
 
+    /// <summary>Splits <c>--allowed-hosts</c> or <c>WHETSTONE_ALLOWED_HOSTS</c>: names separated by commas, blanks dropped.</summary>
+    public static IReadOnlyList<string> SplitHosts(string? list) =>
+        (list ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
     public static string Version { get; } = typeof(WhetstoneServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     public static WebApplication Create(ServerSettings settings, IEnhancer enhancer, IStore? store = null)

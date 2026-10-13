@@ -5,6 +5,11 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+### Added
+
+- `serve --allowed-hosts H1,H2` (or `WHETSTONE_ALLOWED_HOSTS`): the host names accepted besides `localhost` and `127.0.0.1`, so `serve --listen` can bind a non-loopback address.
+- A `Dockerfile` and `.github/workflows/image.yml`: the image `ghcr.io/egoushka/whetstone` (linux/amd64), tagged `sha-<12 characters>` on each merge to `main` and `<Version>` on a `v*` tag. See the container section of the reference.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

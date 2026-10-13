@@ -17,7 +17,7 @@ dotnet run --project src/Whetstone.Server -- mcp
 WHETSTONE_API_KEY=choose-a-long-random-key dotnet run --project src/Whetstone.Server -- serve
 ```
 
-`serve` listens on `127.0.0.1:7340`. MCP is at `/v1/mcp` and needs the header `Authorization: Bearer <WHETSTONE_API_KEY>`. `GET /health` needs no key. Without `WHETSTONE_API_KEY`, `serve` exits with code 2 ([Program.cs](../../src/Whetstone.Server/Program.cs)).
+`serve` listens on `127.0.0.1:7340` (to run it in a container instead, see the [container section of the reference](reference.md#container)). MCP is at `/v1/mcp` and needs the header `Authorization: Bearer <WHETSTONE_API_KEY>`. `GET /health` needs no key. Without `WHETSTONE_API_KEY`, `serve` exits with code 2 ([Program.cs](../../src/Whetstone.Server/Program.cs)).
 
 ```bash title="Check that it answers"
 curl http://127.0.0.1:7340/health
