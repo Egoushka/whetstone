@@ -29,7 +29,7 @@ One person who runs a coding agent every day and wants an enhancer that is their
 - It does not run agents, pick a model, or share prompts between users ([VISION.md](../../VISION.md#what-it-will-not-do)).
 - It has no encryption of its own. The store is a plain SQLite file; disk encryption is yours ([ADR 0003](../adr/0003-memory-store.md)).
 - It has no tool to read or delete your data over MCP. `export` and `forget` are commands you run in a terminal, so no agent can call them ([ADR 0003](../adr/0003-memory-store.md)).
-- It has no way to bind a non-loopback address from the command line. `serve --listen` with such an address stops with an error ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs)).
+- It binds a non-loopback address only when you also name the host names clients use, with `--allowed-hosts` or `WHETSTONE_ALLOWED_HOSTS`; without them `serve --listen` stops with an error ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs)).
 
 ## Where it stands
 

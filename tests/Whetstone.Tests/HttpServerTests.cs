@@ -132,6 +132,37 @@ public sealed class HttpServerTests : IAsyncDisposable
     public void Listening_beyond_loopback_needs_allowed_hosts() =>
         Assert.Throws<InvalidOperationException>(() => WhetstoneServer.Create(new ServerSettings(0, Key, Listen: "0.0.0.0"), new PassThrough()));
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" , ")]
+    public void No_allowed_hosts_given_is_an_empty_list(string? list) =>
+        Assert.Empty(WhetstoneServer.SplitHosts(list));
+
+    [Fact]
+    public void Allowed_hosts_are_split_on_commas_and_trimmed() =>
+        Assert.Equal(["app.example", "198.51.100.7"], WhetstoneServer.SplitHosts(" app.example, 198.51.100.7,"));
+
+    [Theory]
+    [InlineData("198.51.100.7", HttpStatusCode.OK)]
+    [InlineData("198.51.100.7:7340", HttpStatusCode.OK)]
+    [InlineData("APP.example", HttpStatusCode.OK)]
+    [InlineData("127.0.0.1", HttpStatusCode.OK)]
+    [InlineData("198.51.100.8", HttpStatusCode.BadRequest)]
+    [InlineData("evil.example:7340", HttpStatusCode.BadRequest)]
+    public async Task A_host_is_accepted_only_when_allowed_with_or_without_its_port(string host, HttpStatusCode expected)
+    {
+        _app = WhetstoneServer.Create(new ServerSettings(0, Key, AllowedHosts: ["198.51.100.7", "app.example"]), new PassThrough());
+        await _app.StartAsync();
+        using var http = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+        request.Headers.Host = host;
+
+        using var response = await http.SendAsync(request);
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_app is not null)

@@ -9,8 +9,10 @@ using Whetstone.Templates;
 const string Usage = """
     usage: whetstone <command>
       mcp                                   the MCP tools over stdio, for a client that starts whetstone itself
-      serve [--listen ADDR] [--port N]      MCP over HTTP at /v1/mcp and GET /health (127.0.0.1:7340 by default);
-                                            the bearer key is read from WHETSTONE_API_KEY
+      serve [--listen ADDR] [--port N] [--allowed-hosts H1,H2]
+                                            MCP over HTTP at /v1/mcp and GET /health (127.0.0.1:7340 by default);
+                                            the bearer key is read from WHETSTONE_API_KEY; a non-loopback --listen
+                                            needs the host names clients use, here or in WHETSTONE_ALLOWED_HOSTS
       export [--repository R] [--before DATE] [--text REGEX]
                                             everything stored for you, as JSON lines (export/v1) on stdout
       replay [--min-chars N]                for each scored request, the earlier one that best matches it (reads only)
@@ -106,7 +108,8 @@ switch (args)
             Console.Error.WriteLine("whetstone serve: --port must be a number");
             return 2;
         }
-        await using (var app = WhetstoneServer.Create(new ServerSettings(port, key, Option("--listen") ?? "127.0.0.1"), enhancer, store))
+        var hosts = WhetstoneServer.SplitHosts(Option("--allowed-hosts") ?? Environment.GetEnvironmentVariable("WHETSTONE_ALLOWED_HOSTS"));
+        await using (var app = WhetstoneServer.Create(new ServerSettings(port, key, Option("--listen") ?? "127.0.0.1", hosts), enhancer, store))
         {
             await app.StartAsync(cts.Token);
             Console.Error.WriteLine($"whetstone serve: {string.Join(", ", app.Urls)} (MCP /v1/mcp, GET /health)");

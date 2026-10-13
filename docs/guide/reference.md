@@ -12,7 +12,7 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 | Command | What it does |
 |---|---|
 | `mcp` | The MCP tools over stdio, for a client that starts whetstone itself |
-| `serve [--listen ADDR] [--port N]` | MCP over HTTP at `/v1/mcp`, and `GET /health` |
+| `serve [--listen ADDR] [--port N] [--allowed-hosts H1,H2]` | MCP over HTTP at `/v1/mcp`, and `GET /health` |
 | `export [--repository R] [--before DATE]` | Everything stored for you, as JSON lines, oldest first |
 | `forget (--all \| [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]` | Counts what matches; with `--confirm`, deletes it |
 | `import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]` | Counts the prompts typed in past sessions under DIR; with `--confirm`, stores them with an implicit score |
@@ -25,10 +25,30 @@ Run from a clone as `dotnet run --project src/Whetstone.Server -- <command>`. An
 | Option | Default | Notes |
 |---|---|---|
 | `--port` | `7340` | Not a number: exit 2 |
-| `--listen` | `127.0.0.1` | Only loopback starts |
+| `--listen` | `127.0.0.1` | An IP address. A non-loopback one needs allowed hosts |
+| `--allowed-hosts` | `WHETSTONE_ALLOWED_HOSTS`, else none | Host names, separated by commas, that clients put in the URL, besides `localhost` and `127.0.0.1` |
 
 > [!WARNING]
-> A `--listen` address that is not loopback stops the process with an unhandled `InvalidOperationException`, because the command line has no way to set the allowed host names that the server then requires ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs), `Listening_beyond_loopback_needs_allowed_hosts` in [HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)). Reach it from another host through a tunnel to the loopback port.
+> A `--listen` address that is not loopback with no allowed hosts stops the process with an unhandled `InvalidOperationException`: beyond loopback the Host check is the only guard against DNS rebinding ([WhetstoneServer.cs](../../src/Whetstone.Server/WhetstoneServer.cs), `Listening_beyond_loopback_needs_allowed_hosts` in [HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)). A host entry without a port accepts any port, and the comparison ignores case (`A_host_is_accepted_only_when_allowed_with_or_without_its_port`); any other Host header gets 400.
+
+### Container
+
+The [Dockerfile](../../Dockerfile) builds an image that runs `serve --listen 0.0.0.0 --port 7340` as the non-root user `app` (uid 1654, gid 1654), with `WHETSTONE_DATA_DIR=/data` and `WHETSTONE_USER=owner`. Mount a volume at `/data` that uid 1654 can write, and set `WHETSTONE_API_KEY` and `WHETSTONE_ALLOWED_HOSTS` (the host names clients use, for example the name or address of the machine the container runs on).
+
+```bash title="Run the image"
+docker run -d --name whetstone -p 7340:7340 -v whetstone-data:/data \
+  -e WHETSTONE_API_KEY=... -e WHETSTONE_ALLOWED_HOSTS=<host-clients-use> ghcr.io/egoushka/whetstone:<tag>
+```
+
+The other commands run in the same container with the image's entry point, `dotnet /app/Whetstone.Server.dll`:
+
+```bash title="Commands inside the running container"
+docker exec whetstone dotnet /app/Whetstone.Server.dll export > mine.jsonl
+docker exec whetstone dotnet /app/Whetstone.Server.dll report
+docker exec whetstone dotnet /app/Whetstone.Server.dll forget --all          # counts; add --confirm to delete
+```
+
+The image's health check opens `127.0.0.1:7340` with bash, because the runtime image has no `curl`, and expects `200` from `GET /health`. Images are published by [image.yml](../../.github/workflows/image.yml) as `ghcr.io/egoushka/whetstone:sha-<12 characters of the commit>` on every merge to `main`, and as `:<Version>` on a `v<Version>` tag; the run summary prints the digest to pin.
 
 ### report
 
@@ -63,6 +83,7 @@ It also stores the prompts agents wrote, counted on a second line (`N prompts wr
 | Variable | Default | Used by |
 |---|---|---|
 | `WHETSTONE_API_KEY` | none | `serve`; required |
+| `WHETSTONE_ALLOWED_HOSTS` | none | `serve`: the `--allowed-hosts` list when the option is absent |
 | `WHETSTONE_USER` | `owner` | every command; 1 to 64 of `a-z`, `0-9`, `_`, `-` |
 | `WHETSTONE_DATA_DIR` | `whetstone` under the local application data directory | every command |
 | `WHETSTONE_TEMPLATES` | off | `serve` and `mcp`: `on` seeds the shipped templates and serves them (see "Templates and arms" below); anything else leaves every answer as it was |
