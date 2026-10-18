@@ -29,7 +29,22 @@ and says "not enough data" below 20 per side.
   with agent prompts included.
 - 0.5 (trials): one kind reaches a look of its trial (at least 30 counted runs per arm) with a held-out share,
   `whetstone report` shows it, and the promotion rule in docs/specs/2026-10-10-templates-everywhere-design.md decided it.
-- 0.6 (challengers): a model-written challenger wins at least one trial against a hand-written champion at equal or
-  lower cost, or the model stays off.
+- 0.6 (reward): for one owner's week of live use, at least 80% of typed requests followed by a correction have a
+  correction reason, and the rule-based reason agrees with 30 hand labels in at least 75% of them; delayed outcomes are
+  collected for at least 80% of typed requests made in a git repository; `whetstone report` shows rework, the kind's
+  cost measure, the guardrails and each arm's cache-read share.
+- 0.7 (evidence): a model-written challenger wins at least one trial against a hand-written champion at equal or lower
+  cost, or the model stays off; and one kind with two or more challengers reaches a look sooner than the fixed split
+  would have (same traffic, counted from the store).
+- 0.8 (replay): a challenger screened in the gym and then tried live reaches a look, and the gym's verdict and the live
+  one are reported side by side.
+- 0.9 (context): a template with the memory slot finishes a trial against the same template without it, and the
+  instruction-ablation report lists every rule with its session counts.
+- 0.10 (levels): routing evidence names a cheaper model for at least one kind at a look, and the owner's routing change
+  that followed is linked from the report.
+- 0.11 (person): the owner reads four weekly reports, and the expander or the coach is kept or dropped on its trial's
+  record; the state-aware trial runs only after its privacy decision is recorded.
+- 0.12 (agents): one orchestrator kind is scored by its children, and one graduation proposal is accepted or rejected
+  by the owner with its evidence.
 
-If after 0.5 champions do no better than the held-out share on any kind, stop and find out why before 0.6.
+If after 0.5 champions do no better than the held-out share on any kind, stop and find out why before 0.7.

@@ -13,7 +13,7 @@ section: "Concepts"
 | `src/Whetstone.Server` | The executable: `mcp`, `serve`, `export`, `forget` and the two MCP tools |
 | `tests/Whetstone.Tests` | Tests for both |
 
-This is the layout in [CLAUDE.md](../../CLAUDE.md) and [Whetstone.slnx](../../Whetstone.slnx). The one implementation of `IEnhancer` is `PassThrough` ([PassThrough.cs](../../src/Whetstone/PassThrough.cs)); a rewriting enhancer is the work of goals 0.3 to 0.6.
+This is the layout in [CLAUDE.md](../../CLAUDE.md) and [Whetstone.slnx](../../Whetstone.slnx). The one implementation of `IEnhancer` is `PassThrough` ([PassThrough.cs](../../src/Whetstone/PassThrough.cs)); a rewriting enhancer is the work of goals 0.3 to 0.7.
 
 ## One enhance call
 

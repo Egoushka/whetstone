@@ -5,6 +5,10 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+### Changed
+
+- The roadmap after 0.5: goals 0.6 to 0.12 (reward signals, evidence volume, replay, context, levels and routing, help for the person, agent structure), each with a short spec under `docs/specs/2026-10-19-*` and a bar in docs/evaluation.md. The earlier 0.6 (challengers), 0.7 (imports) and 0.8 (task-kind suggestion) are folded into 0.7 and 0.10.
+
 ### Added
 
 - `serve --allowed-hosts H1,H2` (or `WHETSTONE_ALLOWED_HOSTS`): the host names accepted besides `localhost` and `127.0.0.1`, so `serve --listen` can bind a non-loopback address.
