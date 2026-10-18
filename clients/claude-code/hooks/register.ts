@@ -16,6 +16,8 @@ type Shown = { id: string; ts: number; kind: string; arm: string; template: stri
 export const register: Register = on => {
   let ws: ReturnType<typeof whetstone> | undefined
   let last: Sent | undefined
+  // An opaque id per session, so whetstone can link a correction to the request before it and own commits per session.
+  const sessionId = `cc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
   const byTurn = new Map<string, Sent>()
 
   on('session.start', async ($, e, next) => {
@@ -47,7 +49,7 @@ export const register: Register = on => {
       const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd, timeoutMs: 1500 }).catch(() => undefined)
       const repository = remote?.exitCode === 0 ? repositoryOf(remote.stdout) : undefined
       const enhanced = await Promise.race([
-        client.enhance(e.text, { client: CLIENT, ...(repository ? { repository } : {}) }, DEADLINE_MS),
+        client.enhance(e.text, { client: CLIENT, session_id: sessionId, ...(repository ? { repository } : {}) }, DEADLINE_MS),
         $.clock.sleep(DEADLINE_MS + 300).then(() => undefined),
       ])
       if (!enhanced?.request_id) return next(e)

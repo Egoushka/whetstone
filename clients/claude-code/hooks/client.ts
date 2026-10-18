@@ -96,7 +96,7 @@ export function whetstone(host: Host, url = URL) {
   }
 
   return {
-    enhance: (prompt: string, context: { repository?: string; client: string }, deadlineMs: number) =>
+    enhance: (prompt: string, context: { repository?: string; client: string; session_id?: string }, deadlineMs: number) =>
       call('enhance', { prompt, context, deadline_ms: deadlineMs }) as Promise<Enhanced>,
     feedback: (requestId: string, outcome: Outcome) => call('feedback', { request_id: requestId, outcome }),
   }
