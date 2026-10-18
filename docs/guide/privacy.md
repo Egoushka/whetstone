@@ -20,7 +20,7 @@ Per user, one row per `enhance` call, in the SQLite file described in the [Quick
 | `answer` | changed, template id and version, held out |
 | `outcome` | null until `feedback`; then what it reported and when |
 
-That is the `export/v1` record ([export.schema.json](../../schemas/export/v1/export.schema.json)). No file contents, no model answers and no rewrite are stored. The only outbound call planned is to a rewriting model you configure, goal 0.6, which does not exist yet ([docs/privacy.md](../privacy.md)).
+That is the `export/v1` record ([export.schema.json](../../schemas/export/v1/export.schema.json)). No file contents, no model answers and no rewrite are stored. The only outbound call planned is to a rewriting model you configure, goal 0.7, which does not exist yet ([docs/privacy.md](../privacy.md)).
 
 ## What the redactor replaces
 
