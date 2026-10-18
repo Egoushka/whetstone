@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Whetstone.Contracts;
+using Whetstone.Gym;
 using Whetstone.Import;
 using Whetstone.Outcomes;
 using Whetstone.Retrieval;
@@ -46,6 +47,51 @@ public static partial class Commands
     }
 
     public const string ReindexUsage = "usage: whetstone reindex";
+
+    public const string GymUsage = "usage: whetstone gym select --kind K [--limit N] [--confirm]";
+
+    /// <summary>
+    /// The replay gym (ADR 0006). <c>select</c> picks stored requests of a read-only kind that can be replayed and, with
+    /// <c>--confirm</c>, stores them as cases: an id and a hash, never a copy of the prompt.
+    /// </summary>
+    public static async Task<int> GymAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count == 0 || options[0] != "select")
+            return Refuse(error, "a gym command is select", GymUsage);
+        if (!Parse([.. options.Skip(1)], ["--kind", "--limit"], ["--confirm"], out var parsed, out var problem))
+            return Refuse(error, problem!, GymUsage);
+        if (!parsed!.TryGetValue("--kind", out var kind))
+            return Refuse(error, "--kind is needed", GymUsage);
+        if (!GymCases.Replayable(kind))
+            return Refuse(error, $"'{kind}' is not a read-only kind the gym replays: {string.Join(", ", BuiltInTemplates.ReadOnlyKinds)}", GymUsage);
+        var limit = 30;
+        if (parsed.TryGetValue("--limit", out var text) && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit < 1))
+            return Refuse(error, "--limit is a whole number above 0", GymUsage);
+        try
+        {
+            var records = new List<ExportRecord>();
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                records.Add(record);
+            var existing = (await admin.GymCasesAsync(ct)).Select(c => c.SourceRequestId).ToHashSet(StringComparer.Ordinal);
+            var cases = GymCases.Select(records, kind, limit, existing, DateTimeOffset.UtcNow, out var report);
+            await output.WriteAsync(
+                $"{report.OfKind} stored requests of {kind}: {report.NoCommit} without a repository and commit, {report.LiveState} about live state, "
+                + $"{report.Redacted} with a redaction marker, {report.AlreadyCases} already cases; {report.Chosen} chosen.\n");
+            if (!parsed.ContainsKey("--confirm"))
+            {
+                await output.WriteAsync("Nothing was stored. Add --confirm to store them as cases.\n");
+                return Ok;
+            }
+            if (await admin.AddGymCasesAsync(cases, ct) is { } refused)
+                return Fail(error, "gym", new InvalidOperationException(refused));
+            await output.WriteAsync($"Stored {cases.Count} cases.\n");
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "gym", e);
+        }
+    }
 
     public const string LabelUsage = "usage: whetstone label list [--kind K] [--limit N] | whetstone label set REQUEST_ID yes|no|clear";
 

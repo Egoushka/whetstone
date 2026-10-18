@@ -20,6 +20,8 @@ const string Usage = """
                                             promotion rule says (reads only)
       template list|add|promote|retire      the owner's act on templates: add a challenger, promote it over the champion, retire
                                             a version (options: whetstone template without arguments)
+      gym select --kind K [--limit N] [--confirm]
+                                            stored requests of a read-only kind that a replay gym can run again (ADR 0006)
       label list [--kind K] [--limit N] | label set ID yes|no|clear
                                             the owner's hand labels: did the run complete without a re-ask
       outcomes collect --root DIR [--forge github] [--confirm]
@@ -100,6 +102,8 @@ switch (args)
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:
         return await Commands.ImportAsync(importOptions, stores.ForUser(user), stores.AdminFor(user), new GitHistory(), Console.Out, Console.Error, cts.Token);
+    case ["gym", .. var gymOptions]:
+        return await Commands.GymAsync(gymOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["label", .. var labelOptions]:
         return await Commands.LabelAsync(labelOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["outcomes", .. var outcomesOptions]:
