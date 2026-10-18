@@ -48,16 +48,25 @@ public static partial class Commands
 
     public const string ReindexUsage = "usage: whetstone reindex";
 
-    public const string GymUsage = "usage: whetstone gym select --kind K [--limit N] [--confirm]";
+    public const string GymUsage = """
+        usage: whetstone gym select --kind K [--limit N] [--confirm]
+               whetstone gym run --challenger ID@VERSION [--cases N] [--budget-usd B]
+               whetstone gym report --challenger ID@VERSION
+        """;
 
     /// <summary>
     /// The replay gym (ADR 0006). <c>select</c> picks stored requests of a read-only kind that can be replayed and, with
     /// <c>--confirm</c>, stores them as cases: an id and a hash, never a copy of the prompt.
     /// </summary>
-    public static async Task<int> GymAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    public static async Task<int> GymAsync(
+        IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct,
+        IReplayRunner? runner = null, IJudge? judge = null, Func<DateTimeOffset>? clock = null)
     {
+        clock ??= () => DateTimeOffset.UtcNow;
+        if (options.Count > 0 && options[0] is "run" or "report")
+            return await GymTrialAsync(options, admin, output, error, runner, judge, clock, ct);
         if (options.Count == 0 || options[0] != "select")
-            return Refuse(error, "a gym command is select", GymUsage);
+            return Refuse(error, "a gym command is select, run or report", GymUsage);
         if (!Parse([.. options.Skip(1)], ["--kind", "--limit"], ["--confirm"], out var parsed, out var problem))
             return Refuse(error, problem!, GymUsage);
         if (!parsed!.TryGetValue("--kind", out var kind))
@@ -88,6 +97,59 @@ public static partial class Commands
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "gym", e);
+        }
+    }
+
+    /// <summary><c>gym run</c> and <c>gym report</c> for one challenger version (ADR 0006): screening only, never live evidence.</summary>
+    private static async Task<int> GymTrialAsync(
+        IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, IReplayRunner? runner, IJudge? judge,
+        Func<DateTimeOffset> clock, CancellationToken ct)
+    {
+        var running = options[0] == "run";
+        if (!Parse([.. options.Skip(1)], running ? ["--challenger", "--cases", "--budget-usd"] : ["--challenger"], [], out var parsed, out var problem))
+            return Refuse(error, problem!, GymUsage);
+        if (!parsed!.TryGetValue("--challenger", out var named) || named.Split('@') is not [{ Length: > 0 } id, { Length: > 0 } version])
+            return Refuse(error, "--challenger ID@VERSION is needed", GymUsage);
+        var cases = 30;
+        if (parsed.TryGetValue("--cases", out var text) && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out cases) || cases < 1))
+            return Refuse(error, "--cases is a whole number above 0", GymUsage);
+        var budget = 1.0;
+        if (parsed.TryGetValue("--budget-usd", out text) && (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out budget) || budget <= 0 || !double.IsFinite(budget)))
+            return Refuse(error, "--budget-usd is a number of dollars above 0", GymUsage);
+        try
+        {
+            var (runs, verdicts) = await admin.GymResultsAsync(ct);
+            if (!running)
+            {
+                var screen = Screen.Of(runs, verdicts, id, version);
+                var cost = screen.MedianCostRatio is { } r ? FormattableString.Invariant($"median cost ratio {r:0.00} over {screen.CostPairs} pairs; ") : "no paired cost; ";
+                await output.WriteAsync(
+                    $"{id} v{version}: {screen.Pairs} pairs on one model; completed control {screen.ControlCompleted}, challenger {screen.ChallengerCompleted}; {cost}"
+                    + $"judge: {screen.Wins} for the challenger, {screen.Losses} for the control, {screen.Ties} ties.\n"
+                    + $"{screen.Verdict}: {screen.Why}.\nThe gym decides nothing live: a pass only lets the challenger enter a live trial (whetstone template add).\n");
+                return Ok;
+            }
+            if (runner is null)
+                return Refuse(error, "no gym client is configured: the chargehand runner is not built yet (ADR 0006)", GymUsage);
+            var template = (await admin.TemplatesAsync(ct)).Select(t => t.Template).FirstOrDefault(t => t.Id == id && t.Version == version);
+            if (template is null)
+                return Refuse(error, $"no stored template {id} v{version}", GymUsage);
+            var gymCases = await admin.GymCasesAsync(ct);
+            var wanted = gymCases.Select(c => c.SourceRequestId).ToHashSet(StringComparer.Ordinal);
+            var prompts = new Dictionary<string, string>(StringComparer.Ordinal);
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                if (wanted.Contains(record.RequestId))
+                    prompts[record.RequestId] = record.Prompt;
+            var (newRuns, newVerdicts, report) = await GymReplay.RunAsync(gymCases, prompts, template, runs, runner, judge, budget, cases, clock, ct);
+            if (await admin.AddGymResultsAsync(newRuns, newVerdicts, ct) is { } refused)
+                return Fail(error, "gym", new InvalidOperationException(refused));
+            await output.WriteAsync(FormattableString.Invariant(
+                $"{report.Cases} cases of {template.Kind}: {report.Ran} runs, {report.ReusedControls} controls reused, {report.Skipped} skipped, {newVerdicts.Count} judged; spent about ${report.Spent:0.00} of ${budget:0.00}{(report.BudgetReached ? ", stopped at the budget" : "")}.\n"));
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or HttpRequestException)
         {
             return Fail(error, "gym", e);
         }

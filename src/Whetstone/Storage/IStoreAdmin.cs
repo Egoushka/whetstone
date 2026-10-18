@@ -62,6 +62,12 @@ public interface IStoreAdmin
     /// <summary>Stores new replay cases; a case already stored is left as it is. Null when done, else why not.</summary>
     Task<string?> AddGymCasesAsync(IReadOnlyList<Whetstone.Gym.GymCase> cases, CancellationToken ct);
 
+    /// <summary>Every stored replay run and judge verdict; empty for a file before schema 6.</summary>
+    Task<(IReadOnlyList<Whetstone.Gym.GymRun> Runs, IReadOnlyList<Whetstone.Gym.GymVerdict> Verdicts)> GymResultsAsync(CancellationToken ct);
+
+    /// <summary>Stores replay runs and verdicts in one transaction. Null when done, else why not.</summary>
+    Task<string?> AddGymResultsAsync(IReadOnlyList<Whetstone.Gym.GymRun> runs, IReadOnlyList<Whetstone.Gym.GymVerdict> verdicts, CancellationToken ct);
+
     /// <summary>Sets (or, with null, clears) the owner's hand label on one request. Null when done, else why not.</summary>
     Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct);
 
