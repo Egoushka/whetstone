@@ -34,14 +34,14 @@ export const register: Register = on => {
     ws ??= whetstone($)
     const client = ws
     // The previous typed prompt's answer is judged by how this one opens, whatever this one is.
-    if (last && typed(e.origin?.kind) && e.command === undefined) {
+    if (last && typed(e.origin?.kind) && e.command === undefined && !e.isMeta && !e.text.includes('<system-reminder>')) {
       const before = last
       last = undefined
       void quietly(() => client.feedback(before.enhanced.request_id, { asked_again: isCorrection(e.text) }))
     }
 
     const cwd = await $.session.cwd().catch(() => '')
-    const why = skipReason(e.text, cwd, (e.attachments?.length ?? 0) > 0, e.origin?.kind, e.command !== undefined)
+    const why = skipReason(e.text, cwd, (e.attachments?.length ?? 0) > 0, e.origin?.kind, e.command !== undefined, e.isMeta === true)
     if (why) return next(e)
     try {
       const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd, timeoutMs: 1500 }).catch(() => undefined)
@@ -78,7 +78,8 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e)) // fail open: a broken hook sends the prompt as typed
 
   on('turn.start', async ($, e, next) => {
-    if (!e.agentId && last && !last.turnId && e.text.trim() === last.text.trim()) {
+    // The first main-loop turn after the submit is the prompt's own; its text can differ from what was sent (context added around it).
+    if (!e.agentId && last && !last.turnId) {
       last.turnId = e.turnId
       byTurn.set(e.turnId, last)
     }
@@ -97,7 +98,11 @@ export const register: Register = on => {
         ...(u ? { tokens_in: u.input_tokens, tokens_out: u.output_tokens, cache_read_tokens: u.cache_read_input_tokens, cache_write_tokens: u.cache_creation_input_tokens, model: u.model } : {}),
       }
       const client = ws
-      await quietly(() => Promise.race([client.feedback(sent.enhanced.request_id, outcome), $.clock.sleep(2000)]))
+      try {
+        await Promise.race([client.feedback(sent.enhanced.request_id, outcome), $.clock.sleep(2000)])
+      } catch (err) {
+        $.ui.log(`whetstone: feedback failed (${String(err)})`, { to: 'debug' })
+      }
     }
     return result
   })

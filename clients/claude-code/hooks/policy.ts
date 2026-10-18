@@ -7,9 +7,10 @@ const SECRET = /BEGIN [A-Z ]*PRIVATE KEY|AKIA|eyJ|gh[pousr]_|glpat-|xox[abprs]-|
 const BYPASS = /^\s*[*\/!]/
 
 /** Why this prompt does not go to whetstone, or undefined when it may. */
-export function skipReason(text: string, cwd: string, hasAttachments: boolean, originKind: string | undefined, isCommand: boolean): string | undefined {
+export function skipReason(text: string, cwd: string, hasAttachments: boolean, originKind: string | undefined, isCommand: boolean, isMeta = false): string | undefined {
   if (originKind !== undefined && originKind !== 'composer' && originKind !== 'bridge') return 'not typed by the user'
   if (isCommand) return 'slash command'
+  if (isMeta || text.includes('<system-reminder>')) return 'not typed by the user'
   if (BYPASS.test(text)) return 'bypass prefix'
   if (hasAttachments) return 'has attachments'
   if (text.length < MIN_CHARS) return 'short'
