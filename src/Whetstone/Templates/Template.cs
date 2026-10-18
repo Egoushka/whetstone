@@ -15,6 +15,12 @@ public static class TemplateSources
     /// client knows to run the rewrite (ADR 0005). The version names the rewriter's rules.
     /// </summary>
     public const string Model = "model";
+
+    /// <summary>
+    /// A template that also deletes the phrases of <see cref="FillerStripper"/> from the prompt before its text is put around it (evidence
+    /// volume, decision 4). The only source that changes the original, and then only by deletion.
+    /// </summary>
+    public const string FillerStrip = "filler-strip";
 }
 
 /// <summary>What a template is doing for its kind.</summary>
