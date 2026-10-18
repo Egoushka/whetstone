@@ -36,8 +36,14 @@ public interface IStoreAdmin
     /// <summary>Every stored template version with its role; empty for a file from before the template store.</summary>
     Task<IReadOnlyList<Whetstone.Templates.TemplateRow>> TemplatesAsync(CancellationToken ct);
 
-    /// <summary>Stores a new template version in <paramref name="role"/> (champion or challenger). Null when done, else why not.</summary>
-    Task<string?> AddTemplateAsync(Whetstone.Templates.Template version, string role, DecisionRecord? decision, CancellationToken ct);
+    /// <summary>What the owner decided about each template version, oldest first; empty for a file before schema 6.</summary>
+    Task<IReadOnlyList<(string Kind, string TemplateId, string Version, LibraryDecision Decision)>> TemplateDecisionsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Stores a new template version in <paramref name="role"/> (champion or challenger). Null when done, else why not. A text too close
+    /// to one the kind has retired (<see cref="Whetstone.Templates.Similarity"/>) is refused unless <paramref name="allowSimilar"/>.
+    /// </summary>
+    Task<string?> AddTemplateAsync(Whetstone.Templates.Template version, string role, DecisionRecord? decision, CancellationToken ct, bool allowSimilar = false);
 
     /// <summary>Makes a kind's challenger its champion; the champion it replaces is retired, its record kept. Null when done, else why not.</summary>
     Task<string?> PromoteTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct);
