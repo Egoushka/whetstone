@@ -53,6 +53,9 @@ public interface IStoreAdmin
     /// </summary>
     Task<string?> FindAsync(string importedId, string client, string prompt, DateTimeOffset at, TimeSpan within, CancellationToken ct);
 
+    /// <summary>Sets (or, with null, clears) the owner's hand label on one request. Null when done, else why not.</summary>
+    Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct);
+
     /// <summary>Deletes the matching rows and rewrites the file so their text is not left in it. Returns how many went.</summary>
     Task<int> ForgetAsync(RowFilter filter, CancellationToken ct);
 }

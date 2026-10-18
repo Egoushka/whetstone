@@ -7,7 +7,7 @@ namespace Whetstone.Server;
 /// <summary>The text of <c>whetstone report</c>: per kind, who got what and what the promotion rule says.</summary>
 internal static class ReportText
 {
-    public static string Format(IReadOnlyList<KindReport> kinds, int untracked)
+    public static string Format(IReadOnlyList<KindReport> kinds, int untracked, HandLabels? labels = null)
     {
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $"{kinds.Count} kinds in template trials; {untracked} stored requests are in none.\n");
@@ -43,6 +43,9 @@ internal static class ReportText
             foreach (var look in kind.Looks)
                 text.Append(CultureInfo.InvariantCulture, $"  look at {look.Runs} challenger runs (champion {look.ChampionRuns}): z {look.Z:0.0}, {look.Verdict} ({look.Why})\n");
         }
+        if (labels is { } l)
+            text.Append(CultureInfo.InvariantCulture, $"\nhand labels: {l.Labelled} labelled, {l.Compared} with a reported completion; the proxy (completed, no rework) agrees on {Percent(l.Agree, l.Compared)}")
+                .Append(l.Trusted ? "; enough to trust the proxy.\n" : $"; label at least {HandLabels.Needed} with {HandLabels.Bar * 100:0}% agreement before trusting it (whetstone label).\n");
         text.Append("\nThe report decides nothing: a verdict is applied by the owner.\n");
         return text.ToString();
     }

@@ -45,7 +45,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
                    rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
-                   {(version >= 4 ? "arm" : "NULL")}, {rewards}
+                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -63,7 +63,8 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                         Flag(reader, 19), Count(reader, 20), Count(reader, 21), Count(reader, 22), Count(reader, 23), Count(reader, 24), Count(reader, 25),
                         Flag(reader, 26), Text(reader, 27),
                         Count(reader, 30), Flag(reader, 31), Flag(reader, 32), Flag(reader, 33), Flag(reader, 34), Text(reader, 35), Count(reader, 36),
-                        Count(reader, 37), Count(reader, 38)));
+                        Count(reader, 37), Count(reader, 38)),
+                Flag(reader, 39));
         }
     }
 
@@ -87,6 +88,12 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             Bind(delete, filter);
             deleted = await delete.ExecuteNonQueryAsync(ct);
         }
+        if (deleted > 0 && version >= 6)
+        {
+            await using var orphans = connection.CreateCommand();
+            orphans.CommandText = StoreSchema.ForgetOrphanedGymRows;
+            await orphans.ExecuteNonQueryAsync(ct);
+        }
         if (deleted > 0)
         {
             // The index kept the deleted words until it is rebuilt from what is left; do that before the pages are rewritten.
@@ -101,6 +108,21 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await vacuum.ExecuteNonQueryAsync(ct);
         }
         return deleted;
+    }
+
+    public async Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return "the store has no hand-label column yet; start the server once to upgrade it";
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE requests SET hand_label = $label WHERE request_id = $id";
+        command.Parameters.AddWithValue("$id", requestId);
+        command.Parameters.AddWithValue("$label", label is { } l ? l ? 1 : 0 : DBNull.Value);
+        return await command.ExecuteNonQueryAsync(ct) > 0 ? null : $"no stored request '{requestId}'";
     }
 
     public async Task<string?> FindAsync(string importedId, string client, string prompt, DateTimeOffset at, TimeSpan within, CancellationToken ct)

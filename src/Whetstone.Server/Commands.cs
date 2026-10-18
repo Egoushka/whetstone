@@ -47,6 +47,65 @@ public static partial class Commands
 
     public const string ReindexUsage = "usage: whetstone reindex";
 
+    public const string LabelUsage = "usage: whetstone label list [--kind K] [--limit N] | whetstone label set REQUEST_ID yes|no|clear";
+
+    /// <summary>
+    /// The owner's hand labels (design, "Validity first"): <c>list</c> prints runs with a reported completion and no label, newest
+    /// first, with what the proxy says; <c>set</c> records the owner's verdict: the run completed without needing a re-ask.
+    /// </summary>
+    public static async Task<int> LabelAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        switch (options.ToArray())
+        {
+            case ["set", var id, var verdict, .. var rest]:
+                if (rest.Length > 0)
+                    return Refuse(error, $"unknown option '{rest[0]}'", LabelUsage);
+                if (verdict is not ("yes" or "no" or "clear"))
+                    return Refuse(error, $"a label is yes, no or clear, not '{verdict}'", LabelUsage);
+                bool? label = verdict == "clear" ? null : verdict == "yes";
+                try
+                {
+                    if (await admin.LabelAsync(id, label, ct) is { } problem)
+                        return Fail(error, "label", new InvalidOperationException(problem));
+                    await output.WriteAsync($"{id}: {verdict}\n");
+                    return Ok;
+                }
+                catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+                {
+                    return Fail(error, "label", e);
+                }
+            case ["list", .. var rest]:
+                if (!Parse(rest, ["--kind", "--limit"], [], out var parsed, out var listProblem))
+                    return Refuse(error, listProblem!, LabelUsage);
+                var limit = 20;
+                if (parsed!.TryGetValue("--limit", out var text) && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit < 1))
+                    return Refuse(error, "--limit is a whole number above 0", LabelUsage);
+                parsed.TryGetValue("--kind", out var kind);
+                try
+                {
+                    var candidates = new List<ExportRecord>();
+                    await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                        if (record is { HandLabel: null, Outcome.Completed: not null } && (kind is null || record.Context.TaskKind == kind))
+                            candidates.Add(record);
+                    foreach (var record in candidates.OrderByDescending(r => r.CreatedAt, StringComparer.Ordinal).Take(limit))
+                    {
+                        var run = TrialRun.From(record, CostWeights.Default);
+                        var excerpt = record.Prompt.ReplaceLineEndings(" ");
+                        await output.WriteAsync($"{record.RequestId}  {record.Context.TaskKind ?? "-"}  completed {Yes(run.Completed)}, rework {Yes(run.Rework)}  {(excerpt.Length > 100 ? excerpt[..100] + "..." : excerpt)}\n");
+                    }
+                    return Ok;
+                }
+                catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+                {
+                    return Fail(error, "label", e);
+                }
+            default:
+                return Refuse(error, "a label command is list or set", LabelUsage);
+        }
+    }
+
+    private static string Yes(bool? value) => value switch { true => "yes", false => "no", null => "-" };
+
     /// <summary>Upgrades the store file if it is an older version and rebuilds its search index from the stored requests.</summary>
     public static async Task<int> ReindexAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
     {
@@ -216,7 +275,7 @@ public static partial class Commands
                 .Union(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
             var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None), settings.PersonTimeKinds)).ToList();
             var tracked = reports.Sum(r => r.Runs.Values.Sum());
-            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked));
+            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked, HandLabels.Of(records, settings.Weights)));
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)

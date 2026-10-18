@@ -11,6 +11,7 @@
     "created_at": { "type": "string", "format": "date-time", "description": "UTC, when enhance answered." },
     "prompt": { "type": "string", "description": "The prompt as sent, secrets replaced by [REDACTED:kind], cut at 32,000 characters." },
     "truncated": { "type": "boolean", "description": "True when the prompt was cut." },
+    "hand_label": { "type": "boolean", "description": "The owner's verdict from whetstone label: the run completed without needing a re-ask. Left out when unlabelled." },
     "context": {
       "type": "object",
       "description": "What the client sent beside the prompt; a field it did not send is left out.",
