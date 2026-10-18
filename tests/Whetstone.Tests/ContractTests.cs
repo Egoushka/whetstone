@@ -15,6 +15,8 @@ public class ContractTests
 
     public static TheoryData<string> ExportExamples() => Valid("export");
 
+    public static TheoryData<string> LibraryExamples() => Valid("library");
+
     [Theory]
     [MemberData(nameof(ExportExamples))]
     public void Export_example_round_trips(string file) =>
@@ -32,6 +34,21 @@ public class ContractTests
     [InlineData("invalid-unknown-arm.json")]
     public void Invalid_export_example_is_refused_by_the_embedded_schema(string name) =>
         Assert.NotEmpty(ContractSchemas.ValidateExport(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "export", "v1", "examples", name))).RootElement));
+
+    [Theory]
+    [MemberData(nameof(LibraryExamples))]
+    public void Library_example_round_trips_and_validates(string file)
+    {
+        var node = JsonNode.Parse(File.ReadAllText(file))!;
+        AssertRoundTrips<LibraryRecord>(node);
+        Assert.Empty(ContractSchemas.ValidateLibrary(JsonDocument.Parse(File.ReadAllText(file)).RootElement));
+    }
+
+    [Theory]
+    [InlineData("invalid-unknown-role.json")]
+    [InlineData("invalid-missing-decisions.json")]
+    public void Invalid_library_example_is_refused_by_the_embedded_schema(string name) =>
+        Assert.NotEmpty(ContractSchemas.ValidateLibrary(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "library", "v1", "examples", name))).RootElement));
 
     [Theory]
     [MemberData(nameof(FeedbackExamples))]

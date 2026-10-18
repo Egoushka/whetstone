@@ -18,6 +18,8 @@ public static class ContractSchemas
 
     private static readonly JsonSchema ExportSchema = JsonSchema.FromText(Standalone(Node("export")).GetRawText());
 
+    private static readonly JsonSchema LibrarySchema = JsonSchema.FromText(Standalone(Node("library")).GetRawText());
+
     private static readonly JsonSchema EnhanceRequestSchema = JsonSchema.FromText(EnhanceRequest.GetRawText());
 
     private static readonly JsonSchema FeedbackRequestSchema = JsonSchema.FromText(FeedbackRequest.GetRawText());
@@ -30,6 +32,9 @@ public static class ContractSchemas
 
     /// <summary>Errors against export/v1, the schema of one line of <c>whetstone export</c>; empty means valid.</summary>
     public static IReadOnlyList<string> ValidateExport(JsonElement record) => Validate(ExportSchema, record);
+
+    /// <summary>Errors against library/v1, the schema of one line of <c>whetstone template export</c>; empty means valid.</summary>
+    public static IReadOnlyList<string> ValidateLibrary(JsonElement record) => Validate(LibrarySchema, record);
 
     private static IReadOnlyList<string> Validate(JsonSchema schema, JsonElement document)
     {

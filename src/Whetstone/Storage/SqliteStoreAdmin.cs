@@ -306,7 +306,24 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return found;
     }
 
-    public async Task<string?> AddTemplateAsync(Template version, string role, DecisionRecord? decision, CancellationToken ct)
+    public async Task<IReadOnlyList<(string Kind, string TemplateId, string Version, LibraryDecision Decision)>> TemplateDecisionsAsync(CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return [];
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return [];
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT kind, template_id, version, decided_at, action, counts, note FROM template_decisions ORDER BY decided_at, decision_id";
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var found = new List<(string, string, string, LibraryDecision)>();
+        while (await reader.ReadAsync(ct))
+            found.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), new LibraryDecision(reader.GetString(3), reader.GetString(4), Text(reader, 5), Text(reader, 6))));
+        return found;
+    }
+
+    public async Task<string?> AddTemplateAsync(Template version, string role, DecisionRecord? decision, CancellationToken ct, bool allowSimilar = false)
     {
         if (role is not (TemplateRoles.Champion or TemplateRoles.Challenger))
             return "a new template starts as a champion or a challenger";
@@ -323,6 +340,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             {
                 return $"{version.Kind} already has a {role} ({holder}); retire it first";
             }
+            if (!allowSimilar && await RetiredAsync(connection, transaction, version.Kind, ct) is { Count: > 0 } retired
+                && Similarity.Closest(version, retired) is { } near && near.Closeness >= Similarity.TooClose)
+                return $"{version.Id} v{version.Version} is too close to {near.Retired.Id} v{near.Retired.Version}, retired for {version.Kind} (closeness {near.Closeness:0.00}); "
+                    + "the negative library keeps it as a miss. Pass --allow-similar to store it anyway";
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
@@ -407,6 +428,19 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$version", version);
         return await command.ExecuteScalarAsync(ct) as string;
+    }
+
+    private static async Task<List<Template>> RetiredAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT template_id, version, kind, before_text, after_text, source FROM templates WHERE kind = $kind AND role = 'retired'";
+        command.Parameters.AddWithValue("$kind", kind);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var found = new List<Template>();
+        while (await reader.ReadAsync(ct))
+            found.Add(new Template(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)));
+        return found;
     }
 
     private static async Task<long> CountAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string role, CancellationToken ct)

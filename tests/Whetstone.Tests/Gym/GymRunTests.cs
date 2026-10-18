@@ -108,7 +108,7 @@ public sealed class GymRunTests : IDisposable
     {
         await SeedCases(3);
         await Gym(new Runner(r => Done(r)), null, "run", "--challenger", "explore-steps@1");
-        var next = Challenger with { Version = "2" };
+        var next = Challenger with { Version = "2", After = "\n\nAnswer in three bullets and cite every file you read." };
         Assert.Null(await _stores.AdminFor("owner").RetireTemplateAsync(Challenger.Kind, Challenger.Id, "1", null, CancellationToken.None));
         Assert.Null(await _stores.AdminFor("owner").AddTemplateAsync(next, TemplateRoles.Challenger, null, CancellationToken.None));
         var runner = new Runner(r => Done(r));

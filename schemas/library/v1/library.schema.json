@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Egoushka/whetstone/schemas/library/v1/library.schema.json",
+  "title": "whetstone library v1",
+  "description": "One line of `whetstone template export`: a template version the store holds, in any role, with what the owner decided about it. Retired versions are the negative library: texts that were tried and lost, kept so they are not tried again.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["template_id", "version", "kind", "before", "after", "source", "role", "created_at", "decisions"],
+  "properties": {
+    "template_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "minLength": 1 },
+    "before": { "type": "string", "description": "Text placed before the prompt." },
+    "after": { "type": "string", "description": "Text placed after the prompt." },
+    "source": { "type": "string", "minLength": 1, "description": "Where the version came from: built-in, hand, model, ..." },
+    "role": { "enum": ["champion", "challenger", "retired"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "decisions": {
+      "type": "array",
+      "description": "What the owner did to the version, oldest first.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decided_at", "action"],
+        "properties": {
+          "decided_at": { "type": "string", "format": "date-time" },
+          "action": { "enum": ["add", "promote", "retire"] },
+          "counts": { "type": "string", "description": "The report's counts for the kind at the time, as JSON text." },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

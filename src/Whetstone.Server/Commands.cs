@@ -262,7 +262,8 @@ public static partial class Commands
 
     public const string TemplateUsage = """
         usage: whetstone template list
-               whetstone template add --kind K --id ID --version V --after TEXT [--before TEXT] [--source S] [--champion] [--note TEXT]
+               whetstone template export
+               whetstone template add --kind K --id ID --version V --after TEXT [--before TEXT] [--source S] [--champion] [--allow-similar] [--note TEXT]
                whetstone template promote --kind K --id ID --version V [--note TEXT]
                whetstone template retire --kind K --id ID --version V [--note TEXT]
         """;
@@ -291,9 +292,24 @@ public static partial class Commands
                     foreach (var row in rows.OrderBy(r => r.Template.Kind, StringComparer.Ordinal).ThenBy(r => r.CreatedAt))
                         await output.WriteAsync($"{row.Template.Kind}  {row.Template.Id} v{row.Template.Version}  {row.Role}  ({row.Template.Source}, {row.CreatedAt:yyyy-MM-dd})\n");
                     return Ok;
+                case "export":
+                    {
+                        if (rest.Count > 0)
+                            return Refuse(error, $"unknown option '{rest[0]}'", TemplateUsage);
+                        // Every version, retired ones too: the negative library (evidence volume, decision 5) is what lost, with the counts at the time.
+                        var decisions = await admin.TemplateDecisionsAsync(ct);
+                        foreach (var row in (await admin.TemplatesAsync(ct)).OrderBy(r => r.Template.Kind, StringComparer.Ordinal).ThenBy(r => r.CreatedAt).ThenBy(r => r.Template.Id, StringComparer.Ordinal))
+                        {
+                            var t = row.Template;
+                            var own = decisions.Where(d => d.Kind == t.Kind && d.TemplateId == t.Id && d.Version == t.Version).Select(d => d.Decision).ToList();
+                            var record = new LibraryRecord(t.Id, t.Version, t.Kind, t.Before, t.After, t.Source, row.Role, row.CreatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture), own);
+                            await output.WriteAsync(JsonSerializer.Serialize(record, ContractJson.Options) + "\n");
+                        }
+                        return Ok;
+                    }
                 case "add":
                     {
-                        if (!Parse(rest, ["--kind", "--id", "--version", "--before", "--after", "--source", "--note"], ["--champion"], out var add, out var problem))
+                        if (!Parse(rest, ["--kind", "--id", "--version", "--before", "--after", "--source", "--note"], ["--champion", "--allow-similar"], out var add, out var problem))
                             return Refuse(error, problem!, TemplateUsage);
                         if (!Identity(add!, out var kind, out var id, out var version, out problem))
                             return Refuse(error, problem!, TemplateUsage);
@@ -305,7 +321,7 @@ public static partial class Commands
                         if (template.Render("x", null) is null)
                             return Refuse(error, "the template cannot be rendered", TemplateUsage);
                         var role = add!.ContainsKey("--champion") ? TemplateRoles.Champion : TemplateRoles.Challenger;
-                        return Report(await admin.AddTemplateAsync(template, role, await DecisionAsync(admin, kind, add!, ct), ct), $"Stored {id} v{version} for {kind} as {role}.", output, error);
+                        return Report(await admin.AddTemplateAsync(template, role, await DecisionAsync(admin, kind, add!, ct), ct, add!.ContainsKey("--allow-similar")), $"Stored {id} v{version} for {kind} as {role}.", output, error);
                     }
                 case "promote" or "retire":
                     {
