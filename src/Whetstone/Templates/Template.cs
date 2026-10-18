@@ -110,10 +110,29 @@ public sealed record KindTemplates(Template? Champion, IReadOnlyList<Template> C
     /// <summary>The first challenger, or null; the one a kind with a single challenger has.</summary>
     public Template? Challenger => Challengers.Count > 0 ? Challengers[0] : null;
 
+    /// <summary>The kind's active traits (goal 0.7, decision 2): a kind with any is in a factorial trial; one with none is not.</summary>
+    public IReadOnlyList<Trait> Traits { get; init; } = [];
+
     public bool Equals(KindTemplates? other) =>
         other is not null && Equals(Champion, other.Champion) && Challengers.SequenceEqual(other.Challengers);
 
     public override int GetHashCode() => HashCode.Combine(Champion, Challengers.Count);
+}
+
+/// <summary>
+/// A named paragraph that does one thing (name the file to touch, a stop rule), added after a kind's template on the requests whose
+/// hash draws it on. Draws are independent per trait, so each trait's effect is estimated across the others (a factorial design).
+/// </summary>
+public sealed record Trait(string Id, string Kind, string Text)
+{
+    /// <summary>A kind with more than this many traits has too many combinations for one owner's volume.</summary>
+    public const int MaxPerKind = 4;
+
+    /// <summary>Of every 100 requests, this many get a trait.</summary>
+    public const int OnPercent = 50;
+
+    /// <summary>Whether the request gets the trait: from a hash of the kind, the request id and the trait, so a replay draws the same.</summary>
+    public bool On(string requestId) => Arms.Bucket(Kind, requestId + "\0trait\0" + Id) < OnPercent;
 }
 
 /// <summary>A template version as stored, with the role it has.</summary>

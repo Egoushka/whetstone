@@ -83,8 +83,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT OR REPLACE INTO requests
-              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id)
-            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session)
+              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id, traits)
+            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session, $traits)
             """;
         command.Parameters.AddWithValue("$id", row.RequestId);
         command.Parameters.AddWithValue("$at", Text(row.CreatedAt));
@@ -101,6 +101,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$source", (object?)row.SourceRequestId ?? DBNull.Value);
         command.Parameters.AddWithValue("$arm", (object?)row.Arm ?? DBNull.Value);
         command.Parameters.AddWithValue("$session", (object?)row.SessionId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$traits", (object?)row.Traits ?? DBNull.Value);
         var stored = await command.ExecuteNonQueryAsync(ct);
         if (row.Corrects is null)
             return stored;
@@ -212,7 +213,15 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
             else
                 challengers.Add((template, reader.GetString(7)));
         }
-        return new KindTemplates(champion, [.. challengers.OrderBy(c => c.Order, StringComparer.Ordinal).ThenBy(c => c.Template.Id, StringComparer.Ordinal).Select(c => c.Template)]);
+        await reader.CloseAsync();
+        await using var traitCommand = connection.CreateCommand();
+        traitCommand.CommandText = "SELECT trait_id, text FROM traits WHERE kind = $kind AND active = 1 ORDER BY trait_id";
+        traitCommand.Parameters.AddWithValue("$kind", kind);
+        await using var traitReader = await traitCommand.ExecuteReaderAsync(ct);
+        var traits = new List<Trait>();
+        while (await traitReader.ReadAsync(ct))
+            traits.Add(new Trait(traitReader.GetString(0), kind, traitReader.GetString(1)));
+        return new KindTemplates(champion, [.. challengers.OrderBy(c => c.Order, StringComparer.Ordinal).ThenBy(c => c.Template.Id, StringComparer.Ordinal).Select(c => c.Template)]) { Traits = traits };
     }, ct);
 
     public async Task<IReadOnlyDictionary<string, Tally>> TalliesAsync(string kind, CancellationToken ct) => await UseAsync<IReadOnlyDictionary<string, Tally>>(async connection =>

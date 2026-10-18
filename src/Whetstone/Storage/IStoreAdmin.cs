@@ -36,6 +36,15 @@ public interface IStoreAdmin
     /// <summary>Every stored template version with its role; empty for a file from before the template store.</summary>
     Task<IReadOnlyList<Whetstone.Templates.TemplateRow>> TemplatesAsync(CancellationToken ct);
 
+    /// <summary>Every trait with whether it is still drawn; empty for a file before schema 9.</summary>
+    Task<IReadOnlyList<(Whetstone.Templates.Trait Trait, bool Active)>> TraitsAsync(CancellationToken ct);
+
+    /// <summary>Adds a trait to a kind (at most <see cref="Whetstone.Templates.Trait.MaxPerKind"/> active ones). Null when done, else why not.</summary>
+    Task<string?> AddTraitAsync(Whetstone.Templates.Trait trait, CancellationToken ct);
+
+    /// <summary>Stops drawing a trait for a kind; its runs stay. Null when done, else why not.</summary>
+    Task<string?> RetireTraitAsync(string kind, string id, CancellationToken ct);
+
     /// <summary>What the owner decided about each template version, oldest first; empty for a file before schema 6.</summary>
     Task<IReadOnlyList<(string Kind, string TemplateId, string Version, LibraryDecision Decision)>> TemplateDecisionsAsync(CancellationToken ct);
 

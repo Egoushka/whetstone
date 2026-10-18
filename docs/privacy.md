@@ -11,6 +11,7 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | the context the client sent (repository, commit, task kind, client, session id) | 0.2 (session id 0.6) | until deleted |
 | the outcome from `feedback`, including delayed outcomes, correction reasons, review finding counts and the person's time | 0.2 (rewards 0.6) | until deleted |
 | the text a client's model wrote in place of the prompt (a rewrite pair), redacted and cut like the prompt | 0.7 | until deleted, with the request |
+| the traits the owner defines (named paragraphs) and which were drawn on or off for each request | 0.7 | until deleted; the draws go with the request |
 | a search index over the stored prompt (words only, no other text) | 0.3 | until deleted; rebuilt on every `forget` |
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |

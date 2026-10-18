@@ -5,12 +5,12 @@ namespace Whetstone.Storage;
 
 /// <summary>
 /// The file's tables and how an older file becomes the current one. Version 2 adds <c>source_request_id</c> (which stored request a
-/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). Version 6 adds the owner's hand label, the template decision log and the replay gym's tables (ADR 0006). Version 7 lets a kind have several challengers. Version 8 keeps the rewrite a client's model wrote beside the prompt. The index holds no text of its own: it points at <c>requests</c>, so a
+/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). Version 6 adds the owner's hand label, the template decision log and the replay gym's tables (ADR 0006). Version 7 lets a kind have several challengers. Version 8 keeps the rewrite a client's model wrote beside the prompt. Version 9 adds traits and the traits drawn for each request. The index holds no text of its own: it points at <c>requests</c>, so a
 /// row deleted there is deleted from the index in the same statement, and <c>forget</c> rebuilds it before the file is compacted.
 /// </summary>
 internal static class StoreSchema
 {
-    public const int Version = 8;
+    public const int Version = 9;
 
     /// <summary>The oldest file the commands can still read; the server upgrades it on first use.</summary>
     public const int OldestReadable = 1;
@@ -71,7 +71,8 @@ internal static class StoreSchema
           review_findings_severe INTEGER,
           person_ms INTEGER,
           hand_label INTEGER,
-          rewritten_prompt TEXT
+          rewritten_prompt TEXT,
+          traits TEXT
         );
         CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
         """;
@@ -92,6 +93,18 @@ internal static class StoreSchema
         );
         CREATE UNIQUE INDEX IF NOT EXISTS templates_one_champion ON templates (kind) WHERE role = 'champion';
         DROP INDEX IF EXISTS templates_one_challenger;
+        """;
+
+    // Named paragraphs a kind may add to its template, each drawn on or off per request (goal 0.7, decision 2).
+    private const string Traits = """
+        CREATE TABLE IF NOT EXISTS traits (
+          trait_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          text TEXT NOT NULL,
+          active INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (trait_id, kind)
+        );
         """;
 
     // What the owner did to a template and the counts the report showed when it was done.
@@ -209,6 +222,9 @@ internal static class StoreSchema
                 await Run(connection, transaction, $"ALTER TABLE requests ADD COLUMN {column} {type}", ct);
         if (found is >= 1 and <= 7)
             await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN rewritten_prompt TEXT", ct);
+        if (found is >= 1 and <= 8)
+            await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN traits TEXT", ct);
+        await Run(connection, transaction, Traits, ct);
         if (found is >= 1 and <= 5)
             await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN hand_label INTEGER", ct);
         await Run(connection, transaction, "CREATE INDEX IF NOT EXISTS requests_by_session ON requests (session_id, created_at)", ct);

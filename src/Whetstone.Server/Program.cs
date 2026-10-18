@@ -18,6 +18,7 @@ const string Usage = """
       replay [--min-chars N]                for each scored request, the earlier one that best matches it (reads only)
       report                                per kind in a template trial: runs per arm, how they went, what the
                                             promotion rule says (reads only)
+      trait list|add|retire                the owner's act on traits: named paragraphs drawn on or off for half a kind's requests
       template list|add|promote|retire      the owner's act on templates: add a challenger, promote it over the champion, retire
                                             a version (options: whetstone template without arguments)
       gym select --kind K [--limit N] [--confirm]
@@ -98,6 +99,8 @@ switch (args)
             return 2;
         }
         return await Commands.ReportAsync(reportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token, trialSettings);
+    case ["trait", .. var traitOptions]:
+        return await Commands.TraitAsync(traitOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["template", .. var templateOptions]:
         return await Commands.TemplateAsync(templateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["reindex", .. var reindexOptions]:

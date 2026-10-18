@@ -80,7 +80,7 @@ public sealed record TrialRun(
     DateTimeOffset At, string? Arm, bool? Completed, bool? AskedAgain, double? Cost, long? DurationMs, string? Model,
     string? TemplateId = null, string? TemplateVersion = null, long? TokensIn = null, long? TokensOut = null, long? CacheReadTokens = null,
     string? Reason = null, long? PersonMs = null, long? ReviewFindings = null, bool? Reverted = null, bool? CiFirstPushGreen = null,
-    long? CacheWriteTokens = null)
+    long? CacheWriteTokens = null, IReadOnlyDictionary<string, bool>? Traits = null)
 {
     /// <summary>
     /// A correction that blames the prompt or the run (reward design, decision 2). With no reason reported, <c>asked_again</c> stands
@@ -94,7 +94,7 @@ public sealed record TrialRun(
         record.Outcome?.Completed, record.Outcome?.AskedAgain, weights.Of(record.Outcome), record.Outcome?.DurationMs, record.Outcome?.Model,
         record.Answer.TemplateId, record.Answer.TemplateVersion, record.Outcome?.TokensIn, record.Outcome?.TokensOut, record.Outcome?.CacheReadTokens,
         record.Outcome?.CorrectionReason, record.Outcome?.PersonMs, record.Outcome?.ReviewFindings, record.Outcome?.Reverted, record.Outcome?.CiFirstPushGreen,
-        record.Outcome?.CacheWriteTokens);
+        record.Outcome?.CacheWriteTokens, record.Answer.Traits);
 }
 
 /// <summary>
@@ -135,6 +135,15 @@ public sealed record KindReport(
 
 /// <summary>One challenger of a kind that has several, judged alone against the champion at the same fixed looks.</summary>
 public sealed record RivalReport(string TemplateId, string Version, int Counted, IReadOnlyList<LookResult> Looks);
+
+/// <summary>How many counted runs of one kind had a trait on and off.</summary>
+public sealed record TraitKindCount(string Kind, int On, int Off);
+
+/// <summary>
+/// One trait's effect on completion (rework counts as not completed), pooled over every kind that carries it with the per-kind counts
+/// beside it. <paramref name="Z"/> is the first group's over the second's; the verdict is a pointer, not a decision.
+/// </summary>
+public sealed record TraitReport(string Trait, int OnRuns, int OnWins, int OffRuns, int OffWins, double Z, string Verdict, IReadOnlyList<TraitKindCount> Kinds);
 
 /// <summary>An arm's counted runs: those with a completion, in the model's evidence window.</summary>
 public sealed record ArmStats(
@@ -187,6 +196,32 @@ public static class Trials
         return new KindReport(kind, templates, runs, model, stats, several ? [] : Looks(challenger, champion, measure),
             SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0, several), Monitor(champion, Of(Arms.HeldOut), measure),
             PerVersion(all), measure.Name, Cache(stats), rivals);
+    }
+
+    /// <summary>
+    /// Each trait's pooled effect (evidence volume, decision 2). Traits are drawn independently of the arm and of each other, so on and
+    /// off runs differ only by the trait in expectation. Only counted runs (those with a completion, in each kind's model window) take
+    /// part, and a verdict waits for <see cref="MinCompared"/> runs on each side.
+    /// </summary>
+    public static IReadOnlyList<TraitReport> TraitEffects(IReadOnlyDictionary<string, IReadOnlyList<TrialRun>> byKind)
+    {
+        var cells = new List<(string Trait, string Kind, bool On, bool Won)>();
+        foreach (var (kind, all) in byKind)
+            foreach (var run in Window(all).Runs.Where(r => r.Arm is Arms.Champion or Arms.Challenger && r.Traits is not null))
+                foreach (var (trait, on) in run.Traits!)
+                    cells.Add((trait, kind, on, run.Completed == true && run.Rework != true));
+        return [.. cells.GroupBy(c => c.Trait).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
+        {
+            var on = g.Where(c => c.On).ToList();
+            var off = g.Where(c => !c.On).ToList();
+            var z = Difference(on.Count(c => c.Won), on.Count, off.Count(c => c.Won), off.Count);
+            var verdict = Math.Min(on.Count, off.Count) < MinCompared ? $"keep running ({on.Count} on, {off.Count} off, fewer than {MinCompared} on a side)"
+                : z > Z ? "candidate: add it to the champions of its kinds"
+                : z < -Z ? "drop it"
+                : "no difference found yet";
+            return new TraitReport(g.Key, on.Count, on.Count(c => c.Won), off.Count, off.Count(c => c.Won), z, verdict,
+                [.. g.GroupBy(c => c.Kind).OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => new TraitKindCount(k.Key, k.Count(c => c.On), k.Count(c => !c.On)))]);
+        })];
     }
 
     private static List<LookResult> Looks(List<TrialRun> challenger, List<TrialRun> champion, CostMeasure measure)

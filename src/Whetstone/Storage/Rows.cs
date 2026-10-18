@@ -54,6 +54,9 @@ public sealed record RequestRow
     /// <summary>Which arm the answer was (champion, challenger, held_out); null when no template trial applied.</summary>
     public string? Arm { get; init; }
 
+    /// <summary>The traits drawn, as a JSON object of trait id to on or off; null when the kind has none.</summary>
+    public string? Traits { get; init; }
+
     /// <summary>
     /// Why this prompt corrects the session's previous request (<see cref="Corrections"/>); null when it does not, or when the client
     /// sent no session id. Kept on the previous row, not this one.
@@ -85,6 +88,7 @@ public sealed record RequestRow
             Truncated = truncated,
             SourceRequestId = response.SourceRequestId,
             Arm = response.Arm,
+            Traits = response.Traits is { Count: > 0 } traits ? System.Text.Json.JsonSerializer.Serialize(traits) : null,
             Corrects = context?.SessionId is null ? null : Corrections.Reason(request.Prompt),
         };
     }
