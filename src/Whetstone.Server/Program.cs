@@ -33,7 +33,7 @@ const string Usage = """
       reindex                               upgrade an older store file and rebuild its search index
       forget (--all | [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
-      import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]
+      import claude-code DIR | opencode DIR-OR-FILE [--exclude DIR] [--exclude-text REGEX] [--confirm]
                                             counts the prompts typed in past sessions under DIR; with --confirm,
                                             stores them, redacted, each scored by what came next
     Every request is stored, redacted, in <WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db

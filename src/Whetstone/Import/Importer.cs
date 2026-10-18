@@ -54,6 +54,8 @@ public static class Importer
 {
     public const string Client = "claude-code";
 
+    public const string OpenCodeClient = "opencode";
+
     public const string AgentClient = "claude-code/agent";
 
     public const string FetchClient = "claude-code/fetch";
@@ -68,15 +70,15 @@ public static class Importer
 
     public static async Task<ImportReport> RunAsync(
         IReadOnlyList<TranscriptSession> sessions, ImportExclusions excluded, IRepositoryHistory history,
-        IStore store, IStoreAdmin admin, bool write, DateTimeOffset now, CancellationToken ct)
+        IStore store, IStoreAdmin admin, bool write, DateTimeOffset now, CancellationToken ct, string client = Client)
     {
-        var (chosen, agentItems) = Choose(sessions, excluded, history, out var kept, out var skipped);
+        var (chosen, agentItems) = Choose(sessions, excluded, history, client, out var kept, out var skipped);
         int created = 0, matched = 0;
         foreach (var (prompt, context, score) in chosen)
         {
             var row = RequestRow.From(new EnhanceRequest(prompt.Text, context),
                 new EnhanceResponse(prompt.Text, false, null, null, "imported", null, IdFor(prompt), false), prompt.At);
-            var existing = await admin.FindAsync(row.RequestId, Client, row.Prompt, prompt.At, SameMoment, ct);
+            var existing = await admin.FindAsync(row.RequestId, client, row.Prompt, prompt.At, SameMoment, ct);
             if (existing is null)
                 created++;
             else if (existing != row.RequestId)
@@ -125,7 +127,7 @@ public static class Importer
     /// orchestrator turns follow the same two rules, keyed by the call's or the message's id.
     /// </summary>
     private static (List<(TypedPrompt Prompt, EnhanceContext Context, double Score)> Typed, List<AgentItem> Agents) Choose(
-        IReadOnlyList<TranscriptSession> sessions, ImportExclusions excluded, IRepositoryHistory history, out int kept, out int skipped)
+        IReadOnlyList<TranscriptSession> sessions, ImportExclusions excluded, IRepositoryHistory history, string client, out int kept, out int skipped)
     {
         var dropped = new HashSet<string>(StringComparer.Ordinal);
         var best = new Dictionary<string, (TypedPrompt Prompt, EnhanceContext Context, double Score, bool Last)>(StringComparer.Ordinal);
@@ -147,7 +149,7 @@ public static class Importer
             {
                 var committed = history.CommittedBetween(session.WorkingDirectory, session.Prompts[0].At, session.LastActivity + Grace);
                 var scores = ImplicitOutcome.Scores([.. session.Prompts.Select(p => p.Text)], committed);
-                var context = new EnhanceContext(Repository: repository, Client: Client, SessionId: SessionIdFor(session.SessionId));
+                var context = new EnhanceContext(Repository: repository, Client: client, SessionId: SessionIdFor(session.SessionId));
                 for (var i = 0; i < session.Prompts.Count; i++)
                 {
                     var prompt = session.Prompts[i];

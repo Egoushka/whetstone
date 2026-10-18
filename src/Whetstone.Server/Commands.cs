@@ -478,7 +478,7 @@ public static partial class Commands
         }
     }
 
-    public const string ImportUsage = "usage: whetstone import claude-code DIR [--exclude DIR] [--exclude-text REGEX] [--confirm]";
+    public const string ImportUsage = "usage: whetstone import (claude-code DIR | opencode DIR-OR-FILE) [--exclude DIR] [--exclude-text REGEX] [--confirm]";
 
     /// <summary>
     /// Reads past Claude Code sessions under DIR and stores what the person typed, each prompt with an implicit score
@@ -487,22 +487,25 @@ public static partial class Commands
     public static async Task<int> ImportAsync(
         IReadOnlyList<string> options, IStore store, IStoreAdmin admin, IRepositoryHistory history, TextWriter output, TextWriter error, CancellationToken ct)
     {
-        if (options.Count < 2 || options[0] != "claude-code" || options[1].StartsWith("--", StringComparison.Ordinal))
-            return Refuse(error, "say which client's sessions and where: claude-code DIR", ImportUsage);
+        if (options.Count < 2 || options[0] is not ("claude-code" or "opencode") || options[1].StartsWith("--", StringComparison.Ordinal))
+            return Refuse(error, "say which client's sessions and where: claude-code DIR or opencode DIR-OR-FILE", ImportUsage);
+        var opencode = options[0] == "opencode";
         var directory = options[1];
         if (!Parse([.. options.Skip(2)], ["--exclude", "--exclude-text"], ["--confirm"], out var parsed, out var problem))
             return Refuse(error, problem!, ImportUsage);
         Regex? excludedText = null;
         if (parsed!.TryGetValue("--exclude-text", out var pattern) && !TryRegex(pattern, out excludedText, out problem))
             return Refuse(error, problem!.Replace("--text", "--exclude-text", StringComparison.Ordinal), ImportUsage);
-        if (!Directory.Exists(directory))
-            return Refuse(error, $"no directory '{directory}'", ImportUsage);
+        var database = opencode ? OpenCodeSessions.Locate(directory) : null;
+        if (opencode ? database is null : !Directory.Exists(directory))
+            return Refuse(error, opencode ? $"no {OpenCodeSessions.DatabaseName} at '{directory}'" : $"no directory '{directory}'", ImportUsage);
         IReadOnlyList<string> excluded = parsed.TryGetValue("--exclude", out var exclude) ? [exclude] : [];
         var write = parsed.ContainsKey("--confirm");
         try
         {
-            var sessions = ClaudeCodeTranscripts.Read(directory);
-            var report = await Importer.RunAsync(sessions, new ImportExclusions(excluded, excludedText), history, store, admin, write, DateTimeOffset.UtcNow, ct);
+            var sessions = opencode ? OpenCodeSessions.Read(database!) : ClaudeCodeTranscripts.Read(directory);
+            var report = await Importer.RunAsync(sessions, new ImportExclusions(excluded, excludedText), history, store, admin, write, DateTimeOffset.UtcNow, ct,
+                opencode ? Importer.OpenCodeClient : Importer.Client);
             await output.WriteAsync(
                 $"{report.Sessions} sessions read, {report.ExcludedSessions} excluded; {report.Prompts} typed prompts: "
                 + $"{report.New} new, {report.Matched} already stored by a live client, {report.Prompts - report.New - report.Matched} imported before.\n");
