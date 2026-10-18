@@ -98,7 +98,7 @@ public class TrialTests
     }
 
     [Fact]
-    public void A_cheaper_challenger_is_promoted_only_when_completion_and_re_asks_are_shown_no_worse()
+    public void A_cheaper_challenger_is_promoted_only_when_completion_and_rework_are_shown_no_worse()
     {
         // Fifteen points of margin cannot be verified with fewer than about a hundred runs per arm (the design's note on the margin).
         var champion = Many(Arms.Champion, 150, 105, cost: 1000, asked: false);
@@ -109,7 +109,7 @@ public class TrialTests
 
         Assert.Equal((100, "promote", true), (shown.Runs, shown.Verdict, shown.Why.Contains("10% lower", StringComparison.Ordinal)));
         Assert.Equal("keep running", unreported.Verdict);
-        Assert.Contains("asked_again", unreported.Why, StringComparison.Ordinal);
+        Assert.Contains("rework", unreported.Why, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -119,6 +119,55 @@ public class TrialTests
         var cheap = Many(Arms.Challenger, 100, 60, 1, cost: 500, asked: false);
 
         Assert.DoesNotContain(Trials.Evaluate("k", [.. champion, .. cheap], Both).Looks, look => look.Verdict == "promote");
+    }
+
+    [Fact]
+    public void A_typed_kind_is_promoted_on_the_persons_time_not_on_tokens()
+    {
+        var champion = Many(Arms.Champion, 150, 105, cost: 1000, asked: false).Select(r => r with { PersonMs = 60_000 }).ToList();
+        var faster = Many(Arms.Challenger, 100, 70, 1, cost: 1000, asked: false).Select(r => r with { PersonMs = 40_000 }).ToList();
+        var cheaperTokensOnly = Many(Arms.Challenger, 100, 70, 1, cost: 500, asked: false).Select(r => r with { PersonMs = 60_000 }).ToList();
+
+        var typed = Trials.Evaluate("typed/implement", [.. champion, .. faster], Both);
+        var tokens = Trials.Evaluate("typed/implement", [.. champion, .. cheaperTokensOnly], Both);
+
+        Assert.Equal("person time", typed.CostMeasure);
+        Assert.Equal("promote", typed.Looks[^1].Verdict);
+        Assert.Contains("person time", typed.Looks[^1].Why, StringComparison.Ordinal);
+        Assert.DoesNotContain(tokens.Looks, look => look.Verdict == "promote");
+        Assert.Equal("run cost", Trials.Evaluate("agent/explore", [.. champion, .. cheaperTokensOnly], Both).CostMeasure);
+    }
+
+    [Fact]
+    public void A_reason_decides_rework_and_asked_again_stands_in_without_one()
+    {
+        var run = Run(1, Arms.Champion, true, asked: true);
+
+        Assert.True(run.Rework);
+        Assert.False((run with { Reason = "new_info" }).Rework);
+        Assert.True((run with { AskedAgain = null, Reason = "incomplete" }).Rework);
+        Assert.Null((run with { AskedAgain = null }).Rework);
+    }
+
+    [Fact]
+    public void A_better_challenger_with_many_more_review_findings_is_not_promoted()
+    {
+        var champion = Many(Arms.Champion, 60, 42).Select(r => r with { ReviewFindings = 0 }).ToList();
+        var sloppy = Many(Arms.Challenger, 30, 29, 1).Select((r, i) => r with { ReviewFindings = i % 2 == 0 ? 3 : 0 }).ToList();
+
+        var look = Assert.Single(Trials.Evaluate("k", [.. champion, .. sloppy], Both).Looks);
+
+        Assert.Equal("keep running", look.Verdict);
+        Assert.Contains("review findings", look.Why, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_guardrail_reported_for_too_few_runs_does_not_block()
+    {
+        var champion = Many(Arms.Champion, 60, 42);
+        var better = Many(Arms.Challenger, 30, 29, 1).Select((r, i) => i < 10 ? r with { Reverted = true } : r).ToList();
+
+        Assert.Equal("promote", Assert.Single(Trials.Evaluate("k", [.. champion, .. better], Both).Looks).Verdict);
     }
 
     [Fact]

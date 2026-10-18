@@ -17,15 +17,41 @@ public sealed record CostWeights(double Input, double CacheWrite, double CacheRe
 }
 
 /// <summary>One run of a kind, reduced to what a trial compares.</summary>
+/// <param name="Reason">Why the next prompt corrected the run, when it did; it decides <see cref="Rework"/>.</param>
+/// <param name="ReviewFindings">Problems a reviewer found in the produced change.</param>
 public sealed record TrialRun(
     DateTimeOffset At, string? Arm, bool? Completed, bool? AskedAgain, double? Cost, long? DurationMs, string? Model,
-    string? TemplateId = null, string? TemplateVersion = null, long? TokensIn = null, long? TokensOut = null, long? CacheReadTokens = null)
+    string? TemplateId = null, string? TemplateVersion = null, long? TokensIn = null, long? TokensOut = null, long? CacheReadTokens = null,
+    string? Reason = null, long? PersonMs = null, long? ReviewFindings = null, bool? Reverted = null, bool? CiFirstPushGreen = null)
 {
+    /// <summary>
+    /// A correction that blames the prompt or the run (reward design, decision 2). With no reason reported, <c>asked_again</c> stands
+    /// in for it, so a client that reports only that is judged as before.
+    /// </summary>
+    public bool? Rework => Reason is not null ? CorrectionReasons.IsRework(Reason) : AskedAgain;
+
     public static TrialRun From(ExportRecord record, CostWeights weights) => new(
         DateTimeOffset.Parse(record.CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal),
         record.Answer.Arm ?? (record.Answer.HeldOut ? Arms.HeldOut : null),
         record.Outcome?.Completed, record.Outcome?.AskedAgain, weights.Of(record.Outcome), record.Outcome?.DurationMs, record.Outcome?.Model,
-        record.Answer.TemplateId, record.Answer.TemplateVersion, record.Outcome?.TokensIn, record.Outcome?.TokensOut, record.Outcome?.CacheReadTokens);
+        record.Answer.TemplateId, record.Answer.TemplateVersion, record.Outcome?.TokensIn, record.Outcome?.TokensOut, record.Outcome?.CacheReadTokens,
+        record.Outcome?.CorrectionReason, record.Outcome?.PersonMs, record.Outcome?.ReviewFindings, record.Outcome?.Reverted, record.Outcome?.CiFirstPushGreen);
+}
+
+/// <summary>
+/// What a kind's cost-only promotion compares (reward design, decision 6): the person's time for typed kinds, where about nine tokens
+/// in ten are cache reads and token cost barely moves, and the weighted token cost for the rest.
+/// </summary>
+public sealed record CostMeasure(string Name, Func<TrialRun, double?> Of)
+{
+    public static readonly CostMeasure RunCost = new("run cost", r => r.Cost);
+
+    public static readonly CostMeasure PersonTime = new("person time", r => r.PersonMs);
+
+    /// <summary>Kinds whose name starts with one of these prefixes are judged on the person's time.</summary>
+    public static readonly IReadOnlyList<string> PersonTimeKinds = ["typed/"];
+
+    public static CostMeasure For(string kind) => PersonTimeKinds.Any(p => kind.StartsWith(p, StringComparison.Ordinal)) ? PersonTime : RunCost;
 }
 
 /// <summary>
@@ -34,7 +60,8 @@ public sealed record TrialRun(
 /// </summary>
 public sealed record VersionStats(
     string? TemplateId, string? TemplateVersion, string Arm, int Uses, int Reported, int Completed, int AskedAgainReported, int AskedAgain,
-    double? MedianTokensIn, double? MedianTokensOut, double? MedianCacheReadTokens, double? MedianDurationMs, double? MedianCost, DateTimeOffset LastUsed);
+    double? MedianTokensIn, double? MedianTokensOut, double? MedianCacheReadTokens, double? MedianDurationMs, double? MedianCost, DateTimeOffset LastUsed,
+    int ReworkReported = 0, int Rework = 0, double? MedianPersonMs = null);
 
 /// <summary>What the rule says at one look (design, "Promotion rule").</summary>
 /// <param name="Verdict"><c>promote</c>, <c>retire</c> or <c>keep running</c>.</param>
@@ -43,10 +70,12 @@ public sealed record LookResult(int Runs, int ChampionRuns, double Z, string Ver
 /// <summary>Everything the report says about one kind.</summary>
 public sealed record KindReport(
     string Kind, KindTemplates Templates, IReadOnlyDictionary<string, int> Runs, string? Model, IReadOnlyDictionary<string, ArmStats> Counted,
-    IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor, IReadOnlyList<VersionStats>? Versions = null);
+    IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor, IReadOnlyList<VersionStats>? Versions = null, string CostMeasure = "run cost");
 
 /// <summary>An arm's counted runs: those with a completion, in the model's evidence window.</summary>
-public sealed record ArmStats(int Runs, int Completed, double? MedianCost, int Costed, double? MedianDurationMs);
+public sealed record ArmStats(
+    int Runs, int Completed, double? MedianCost, int Costed, double? MedianDurationMs,
+    int ReworkReported = 0, int Rework = 0, double? MedianPersonMs = null, int PersonTimed = 0);
 
 /// <summary>
 /// The promotion rule of docs/specs/2026-10-10-templates-everywhere-design.md, as arithmetic: fixed looks, a z test on completion,
@@ -72,6 +101,7 @@ public static class Trials
 
     public static KindReport Evaluate(string kind, IReadOnlyList<TrialRun> all, KindTemplates templates)
     {
+        var measure = CostMeasure.For(kind);
         var runs = all.GroupBy(r => r.Arm ?? "none").ToDictionary(g => g.Key, g => g.Count());
         var (counted, model) = Window(all);
         var byArm = counted.GroupBy(r => r.Arm ?? "none").ToDictionary(g => g.Key, g => g.OrderBy(r => r.At).ToList());
@@ -83,9 +113,10 @@ public static class Trials
         foreach (var look in LookRuns.Where(l => l <= challenger.Count))
         {
             var cutoff = challenger[look - 1].At;
-            looks.Add(Decide(look, [.. challenger.Take(look)], [.. champion.Where(r => r.At <= cutoff)]));
+            looks.Add(Decide(look, [.. challenger.Take(look)], [.. champion.Where(r => r.At <= cutoff)], measure));
         }
-        return new KindReport(kind, templates, runs, model, stats, looks, SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0), Monitor(champion, Of(Arms.HeldOut)), PerVersion(all));
+        return new KindReport(kind, templates, runs, model, stats, looks, SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0),
+            Monitor(champion, Of(Arms.HeldOut), measure), PerVersion(all), measure.Name);
     }
 
     /// <summary>
@@ -111,10 +142,12 @@ public static class Trials
         {
             double? MedianOf(Func<TrialRun, long?> pick) => Median([.. g.Select(pick).Where(v => v is not null).Select(v => (double)v!.Value)]);
             var asked = g.Where(r => r.AskedAgain is not null).ToList();
+            var rework = g.Where(r => r.Rework is not null).ToList();
             return new VersionStats(
                 g.Key.TemplateId, g.Key.TemplateVersion, g.Key.Arm, g.Count(), g.Count(r => r.Completed is not null), g.Count(r => r.Completed == true),
                 asked.Count, asked.Count(r => r.AskedAgain == true), MedianOf(r => r.TokensIn), MedianOf(r => r.TokensOut), MedianOf(r => r.CacheReadTokens),
-                MedianOf(r => r.DurationMs), Median([.. g.Where(r => r.Cost is not null).Select(r => r.Cost!.Value)]), g.Max(r => r.At));
+                MedianOf(r => r.DurationMs), Median([.. g.Where(r => r.Cost is not null).Select(r => r.Cost!.Value)]), g.Max(r => r.At),
+                rework.Count, rework.Count(r => r.Rework == true), MedianOf(r => r.PersonMs));
         })
         .OrderBy(v => v.TemplateId is null ? 1 : 0).ThenByDescending(v => v.LastUsed)];
 
@@ -122,19 +155,27 @@ public static class Trials
     {
         var costs = runs.Where(r => r.Cost is not null).Select(r => r.Cost!.Value).ToList();
         var durations = runs.Where(r => r.DurationMs is not null).Select(r => (double)r.DurationMs!.Value).ToList();
-        return new ArmStats(runs.Count, runs.Count(r => r.Completed == true), Median(costs), costs.Count, Median(durations));
+        var person = runs.Where(r => r.PersonMs is not null).Select(r => (double)r.PersonMs!.Value).ToList();
+        var rework = runs.Where(r => r.Rework is not null).ToList();
+        return new ArmStats(runs.Count, runs.Count(r => r.Completed == true), Median(costs), costs.Count, Median(durations),
+            rework.Count, rework.Count(r => r.Rework == true), Median(person), person.Count);
     }
 
-    private static LookResult Decide(int look, List<TrialRun> challenger, List<TrialRun> champion)
+    private static LookResult Decide(int look, List<TrialRun> challenger, List<TrialRun> champion, CostMeasure measure)
     {
         var z = Difference(Wins(challenger), challenger.Count, Wins(champion), champion.Count);
         if (champion.Count < MinCompared)
             return new LookResult(look, champion.Count, z, "keep running", $"the champion has {champion.Count} counted runs, fewer than {MinCompared}");
-        if (z > Z)
-            return new LookResult(look, champion.Count, z, "promote", "completion is higher");
         if (z < -Z)
             return new LookResult(look, champion.Count, z, "retire", "completion is lower");
-        var cost = CostOnly(challenger, champion);
+        var guard = Guardrails(challenger, champion);
+        if (z > Z)
+            return guard is null
+                ? new LookResult(look, champion.Count, z, "promote", "completion is higher")
+                : new LookResult(look, champion.Count, z, "keep running", $"completion is higher but {guard}");
+        var cost = CostOnly(challenger, champion, measure);
+        if (cost.Holds && guard is not null)
+            cost = (false, $"{cost.Why}, but {guard}");
         if (cost.Holds)
             return new LookResult(look, champion.Count, z, "promote", cost.Why);
         return look == LookRuns[^1]
@@ -142,43 +183,74 @@ public static class Trials
             : new LookResult(look, champion.Count, z, "keep running", cost.Why);
     }
 
-    private static (bool Holds, string Why) CostOnly(List<TrialRun> challenger, List<TrialRun> champion)
+    private static (bool Holds, string Why) CostOnly(List<TrialRun> challenger, List<TrialRun> champion, CostMeasure measure)
     {
-        var tc = challenger.Where(r => r.Cost is not null).Select(r => r.Cost!.Value).ToList();
-        var cc = champion.Where(r => r.Cost is not null).Select(r => r.Cost!.Value).ToList();
+        var name = measure.Name;
+        var tc = Values(challenger, measure.Of);
+        var cc = Values(champion, measure.Of);
         if (tc.Count < MinCompared || cc.Count < MinCompared)
-            return (false, $"cost is reported for {tc.Count} challenger and {cc.Count} champion runs, fewer than {MinCompared}");
+            return (false, $"{name} is reported for {tc.Count} challenger and {cc.Count} champion runs, fewer than {MinCompared}");
         var ratio = Median(tc)!.Value / Median(cc)!.Value;
         var (low, high) = BootstrapRatio(tc, cc);
         if (!(ratio <= 0.9 && high < 1))
-            return (false, $"median cost ratio {ratio.ToString("0.00", CultureInfo.InvariantCulture)} (interval {low.ToString("0.00", CultureInfo.InvariantCulture)} to {high.ToString("0.00", CultureInfo.InvariantCulture)}) is not at least 10% lower");
+            return (false, $"median {name} ratio {ratio.ToString("0.00", CultureInfo.InvariantCulture)} (interval {low.ToString("0.00", CultureInfo.InvariantCulture)} to {high.ToString("0.00", CultureInfo.InvariantCulture)}) is not at least 10% lower");
         var pT = (double)Wins(challenger) / challenger.Count;
         var pC = (double)Wins(champion) / champion.Count;
         var se = Math.Sqrt((pT * (1 - pT) / challenger.Count) + (pC * (1 - pC) / champion.Count));
         if (!(pT - pC - (Z * se) > -Margin))
-            return (false, "cost is lower but completion is not shown to be no worse by 15 points");
-        var at = challenger.Where(r => r.AskedAgain is not null).ToList();
-        var ac = champion.Where(r => r.AskedAgain is not null).ToList();
+            return (false, $"{name} is lower but completion is not shown to be no worse by 15 points");
+        var at = challenger.Where(r => r.Rework is not null).ToList();
+        var ac = champion.Where(r => r.Rework is not null).ToList();
         if (at.Count < MinCompared || ac.Count < MinCompared)
-            return (false, "cost is lower but asked_again is not reported for enough runs to show no more re-asks");
-        var qT = (double)at.Count(r => r.AskedAgain == true) / at.Count;
-        var qC = (double)ac.Count(r => r.AskedAgain == true) / ac.Count;
+            return (false, $"{name} is lower but rework is not reported for enough runs to show no more of it");
+        var qT = (double)at.Count(r => r.Rework == true) / at.Count;
+        var qC = (double)ac.Count(r => r.Rework == true) / ac.Count;
         var qse = Math.Sqrt((qT * (1 - qT) / at.Count) + (qC * (1 - qC) / ac.Count));
-        return qT - qC + (Z * qse) < Margin ? (true, "cost is at least 10% lower with completion and re-asks no worse") : (false, "cost is lower but re-asks are not shown to be no more by 15 points");
+        return qT - qC + (Z * qse) < Margin ? (true, $"{name} is at least 10% lower with completion and rework no worse") : (false, $"{name} is lower but rework is not shown to be no more by 15 points");
     }
 
+    /// <summary>
+    /// The guardrails a promotion must pass (reward design, decision 6): the share of runs with review findings, with a revert within 7
+    /// days, and with a red first CI run. Each is compared only when both arms report it for <see cref="MinCompared"/> runs; it blocks
+    /// when the challenger's share is worse by more than <see cref="Margin"/>, or worse at <see cref="Z"/>. Null when none blocks.
+    /// </summary>
+    private static string? Guardrails(List<TrialRun> challenger, List<TrialRun> champion)
+    {
+        foreach (var (name, bad) in new (string, Func<TrialRun, bool?>)[]
+        {
+            ("runs with review findings", r => r.ReviewFindings is { } f ? f > 0 : null),
+            ("reverted runs", r => r.Reverted),
+            ("runs whose first CI run failed", r => r.CiFirstPushGreen is { } g ? !g : null),
+        })
+        {
+            var t = challenger.Select(bad).Where(b => b is not null).ToList();
+            var c = champion.Select(bad).Where(b => b is not null).ToList();
+            if (t.Count < MinCompared || c.Count < MinCompared)
+                continue;
+            var pT = (double)t.Count(b => b == true) / t.Count;
+            var pC = (double)c.Count(b => b == true) / c.Count;
+            if (pT - pC > Margin || Difference(t.Count(b => b == true), t.Count, c.Count(b => b == true), c.Count) > Z)
+                return $"the share of {name} is worse ({Share(pT)} against {Share(pC)})";
+        }
+        return null;
+    }
+
+    private static string Share(double p) => (100 * p).ToString("0", CultureInfo.InvariantCulture) + "%";
+
+    private static List<double> Values(List<TrialRun> runs, Func<TrialRun, double?> of) => [.. runs.Select(of).Where(v => v is not null).Select(v => v!.Value)];
+
     /// <summary>The champion against the held-out arm: a drop in completion, or a cost 10% worse with the interval above 1, is a regression.</summary>
-    private static string? Monitor(List<TrialRun> champion, List<TrialRun> held)
+    private static string? Monitor(List<TrialRun> champion, List<TrialRun> held, CostMeasure measure)
     {
         if (champion.Count < MinCompared || held.Count < MinCompared)
             return null;
         var z = Difference(Wins(champion), champion.Count, Wins(held), held.Count);
         if (z < -Z)
             return $"champion completion is below the held-out arm (z {z.ToString("0.0", CultureInfo.InvariantCulture)}): demote";
-        var cc = champion.Where(r => r.Cost is not null).Select(r => r.Cost!.Value).ToList();
-        var hc = held.Where(r => r.Cost is not null).Select(r => r.Cost!.Value).ToList();
+        var cc = Values(champion, measure.Of);
+        var hc = Values(held, measure.Of);
         if (cc.Count >= MinCompared && hc.Count >= MinCompared && Median(cc)! / Median(hc)! >= 1.1 && BootstrapRatio(cc, hc).Low > 1)
-            return "champion cost is at least 10% above the held-out arm: demote";
+            return $"champion {measure.Name} is at least 10% above the held-out arm: demote";
         return $"no sign of harm against the held-out arm (completion z {z.ToString("0.0", CultureInfo.InvariantCulture)})";
     }
 

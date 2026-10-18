@@ -49,6 +49,11 @@ trial, so the rule is built to be honest first and fast second.
   completion is not worse by more than the margin (lower bound of the difference above minus 15 points; a 10-point
   margin needs about 260 runs per arm, so it is a setting, not a default) and the `asked_again` rate is not higher by
   more than the same margin.
+- **Since goal 0.6** ([reward signals](2026-10-19-reward-signals-design.md)): rework (a correction whose reason blames the
+  prompt or the run; `asked_again` when no reason is reported) replaces `asked_again` in the gate above; the cost measure
+  is the person's time for typed kinds and run cost for the rest; and no promotion passes when the share of runs with
+  review findings, with a revert or with a red first CI run is worse by more than the margin or worse at z 2.2, each
+  compared once both arms report it for 30 runs.
 - **Retirement.** A challenger is retired at a look when the completion z statistic is below minus 2.2.
 - **Run cost.** `tokens_in`, `cache_write_tokens`, `cache_read_tokens` and `tokens_out`, each times a weight from
   configuration (starting weights: 1, 1.25, 0.1 and 5, to be updated when the provider's prices change). Duration and
