@@ -7,6 +7,7 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 
 ### Changed
 
+- ADR 0006: a replay gym screens challengers before a live trial and never counts toward promotion; docs/privacy.md lists replays as a second outbound path.
 - The roadmap after 0.5: goals 0.6 to 0.12 (reward signals, evidence volume, replay, context, levels and routing, help for the person, agent structure), each with a short spec under `docs/specs/2026-10-19-*` and a bar in docs/evaluation.md. The earlier 0.6 (challengers), 0.7 (imports) and 0.8 (task-kind suggestion) are folded into 0.7 and 0.10.
 - A `feedback` report no longer erases `rewrite_accepted`, `model_overridden`, `score`, `cost_usd` or `model` that an earlier report gave and it leaves out, so a delayed report of its own keeps the run's model and score.
 

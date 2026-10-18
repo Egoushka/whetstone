@@ -1,7 +1,6 @@
 # Replay gym: trials without waiting for live traffic (goal 0.8)
 
-Status: outline, revised 2026-10-19 with the findings of a research pass over chargehand. An ADR and a privacy amendment
-come before any code (decision 6).
+Status: accepted by the owner 2026-10-19; decision recorded in [ADR 0006](../adr/0006-replay-gym-screens-challengers.md).
 
 Live traffic finishes few trials. Stored prompts with their repository and commit can be run again, by a client, with a
 challenger instead of the champion, on a cheap model, and scored the same way as live runs. whetstone does
@@ -22,7 +21,7 @@ challenger itself and sends the finished prompt; chargehand's own whetstone seam
 | 3 | Unit cases | Each champion keeps five replay cases that must still complete before a challenger replacing it is promoted, and before a new champion is served. |
 | 4 | Drift canary | When the `model` reported for a kind changes (the rule already restarts evidence then), the champion's unit cases are queued for the gym, and the report flags the kind until they pass. |
 | 5 | Harness comparison | The same cases may be run through different clients (Claude Code, OpenCode, chargehand on a cheap preset). The report compares them per kind. whetstone chooses nothing from it. Later than decisions 1 to 4. |
-| 6 | Privacy | Replays send stored, redacted prompts to the gym client and a judge model. docs/privacy.md says today that the only outbound call is the rewriting model; it is amended, and an ADR records the decision, before the gym is built. Answers are not stored. `forget` removes gym rows with the requests they came from. |
+| 6 | Privacy | Replays send stored, redacted prompts to the gym client and a judge model. docs/privacy.md lists this path (ADR 0006). Answers are not stored. `forget` removes gym rows with the requests they came from. |
 
 ## Fit with the vision
 
