@@ -306,7 +306,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return found;
     }
 
-    public async Task<string?> AddTemplateAsync(Template version, string role, CancellationToken ct)
+    public async Task<string?> AddTemplateAsync(Template version, string role, DecisionRecord? decision, CancellationToken ct)
     {
         if (role is not (TemplateRoles.Champion or TemplateRoles.Challenger))
             return "a new template starts as a champion or a challenger";
@@ -332,10 +332,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             insert.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
             await insert.ExecuteNonQueryAsync(ct);
             return null;
-        }, ct);
+        }, ("add", version.Kind, version.Id, version.Version, decision), ct);
     }
 
-    public async Task<string?> PromoteTemplateAsync(string kind, string id, string version, CancellationToken ct) =>
+    public async Task<string?> PromoteTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct) =>
         await ChangeTemplatesAsync(async (connection, transaction) =>
         {
             var role = await RoleOfAsync(connection, transaction, kind, id, version, ct);
@@ -346,9 +346,9 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'retired' WHERE kind = $kind AND role = 'champion'", kind, null, null, ct);
             await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'champion' WHERE kind = $kind AND template_id = $id AND version = $version", kind, id, version, ct);
             return null;
-        }, ct);
+        }, ("promote", kind, id, version, decision), ct);
 
-    public async Task<string?> RetireTemplateAsync(string kind, string id, string version, CancellationToken ct) =>
+    public async Task<string?> RetireTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct) =>
         await ChangeTemplatesAsync(async (connection, transaction) =>
         {
             var role = await RoleOfAsync(connection, transaction, kind, id, version, ct);
@@ -358,9 +358,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                 return $"{id} v{version} is already retired";
             await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'retired' WHERE kind = $kind AND template_id = $id AND version = $version", kind, id, version, ct);
             return null;
-        }, ct);
+        }, ("retire", kind, id, version, decision), ct);
 
-    private async Task<string?> ChangeTemplatesAsync(Func<SqliteConnection, SqliteTransaction, Task<string?>> change, CancellationToken ct)
+    private async Task<string?> ChangeTemplatesAsync(
+        Func<SqliteConnection, SqliteTransaction, Task<string?>> change, (string Action, string Kind, string Id, string Version, DecisionRecord? Decision) done, CancellationToken ct)
     {
         if (!File.Exists(path))
             return "there is no store file yet";
@@ -370,9 +371,24 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             return "the store has no template table yet; start the server once to upgrade it";
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
         var problem = await change(connection, transaction);
-        if (problem is null)
-            await transaction.CommitAsync(ct);
-        return problem;
+        if (problem is not null)
+            return problem;
+        if (version >= 6)
+        {
+            await using var log = connection.CreateCommand();
+            log.Transaction = transaction;
+            log.CommandText = "INSERT INTO template_decisions (decided_at, kind, template_id, version, action, counts, note) VALUES ($at, $kind, $id, $version, $action, $counts, $note)";
+            log.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+            log.Parameters.AddWithValue("$kind", done.Kind);
+            log.Parameters.AddWithValue("$id", done.Id);
+            log.Parameters.AddWithValue("$version", done.Version);
+            log.Parameters.AddWithValue("$action", done.Action);
+            log.Parameters.AddWithValue("$counts", (object?)done.Decision?.Counts ?? DBNull.Value);
+            log.Parameters.AddWithValue("$note", (object?)done.Decision?.Note ?? DBNull.Value);
+            await log.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return null;
     }
 
     private static async Task<string?> RoleOfAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, string version, CancellationToken ct)

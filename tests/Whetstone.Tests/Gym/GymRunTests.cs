@@ -64,7 +64,7 @@ public sealed class GymRunTests : IDisposable
                 CancellationToken.None);
         }
         await Commands.GymAsync(["select", "--kind", "agent/explore", "--confirm"], _stores.AdminFor("owner"), new StringWriter(), new StringWriter(), CancellationToken.None);
-        Assert.Null(await _stores.AdminFor("owner").AddTemplateAsync(Challenger, TemplateRoles.Challenger, CancellationToken.None));
+        Assert.Null(await _stores.AdminFor("owner").AddTemplateAsync(Challenger, TemplateRoles.Challenger, null, CancellationToken.None));
     }
 
     private async Task<(int Code, string Out, string Err)> Gym(IReplayRunner? runner, IJudge? judge, params string[] options)
@@ -109,8 +109,8 @@ public sealed class GymRunTests : IDisposable
         await SeedCases(3);
         await Gym(new Runner(r => Done(r)), null, "run", "--challenger", "explore-steps@1");
         var next = Challenger with { Version = "2" };
-        Assert.Null(await _stores.AdminFor("owner").RetireTemplateAsync(Challenger.Kind, Challenger.Id, "1", CancellationToken.None));
-        Assert.Null(await _stores.AdminFor("owner").AddTemplateAsync(next, TemplateRoles.Challenger, CancellationToken.None));
+        Assert.Null(await _stores.AdminFor("owner").RetireTemplateAsync(Challenger.Kind, Challenger.Id, "1", null, CancellationToken.None));
+        Assert.Null(await _stores.AdminFor("owner").AddTemplateAsync(next, TemplateRoles.Challenger, null, CancellationToken.None));
         var runner = new Runner(r => Done(r));
 
         var again = await Gym(new Runner(r => Done(r)), null, "run", "--challenger", "explore-steps@1");
