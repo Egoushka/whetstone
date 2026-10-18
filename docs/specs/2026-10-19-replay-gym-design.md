@@ -4,7 +4,7 @@ Status: outline, revised 2026-10-19 with the findings of a research pass over ch
 come before any code (decision 6).
 
 Live traffic finishes few trials. Stored prompts with their repository and commit can be run again, by a client, with a
-challenger instead of the champion, on cheap models and in batch, and scored the same way as live runs. whetstone does
+challenger instead of the champion, on a cheap model, and scored the same way as live runs. whetstone does
 not run them: a gym client does (chargehand first), and whetstone supplies cases and records outcomes.
 
 What the research found: chargehand pins a run to any commit its clone holds, and its cheap preset runs a read-only
