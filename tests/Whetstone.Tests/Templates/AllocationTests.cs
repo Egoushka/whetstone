@@ -83,9 +83,9 @@ public sealed class AllocationTests : IDisposable
         var admin = _stores.AdminFor("owner");
         await _stores.TemplatesFor("owner").SeedAsync([new Template("base", "1", "typed/implement", "", "Base.", "hand")], TemplateRoles.Champion, CancellationToken.None);
         for (var i = 1; i <= KindTemplates.MaxChallengers; i++)
-            Assert.Null(await admin.AddTemplateAsync(new Template($"c{i}", "1", "typed/implement", "", $"Text {i}.", "hand"), TemplateRoles.Challenger, CancellationToken.None));
+            Assert.Null(await admin.AddTemplateAsync(new Template($"c{i}", "1", "typed/implement", "", $"Text {i}.", "hand"), TemplateRoles.Challenger, null, CancellationToken.None));
 
-        var sixth = await admin.AddTemplateAsync(new Template("c6", "1", "typed/implement", "", "Text 6.", "hand"), TemplateRoles.Challenger, CancellationToken.None);
+        var sixth = await admin.AddTemplateAsync(new Template("c6", "1", "typed/implement", "", "Text 6.", "hand"), TemplateRoles.Challenger, null, CancellationToken.None);
         var found = await _stores.TemplatesFor("owner").ForKindAsync("typed/implement", CancellationToken.None);
 
         Assert.Contains("5 challengers", sixth, StringComparison.Ordinal);
@@ -98,7 +98,7 @@ public sealed class AllocationTests : IDisposable
         var admin = _stores.AdminFor("owner");
         await _stores.TemplatesFor("owner").SeedAsync([new Template("base", "1", "k", "", "Base.", "hand")], TemplateRoles.Champion, CancellationToken.None);
 
-        var problem = await admin.AddTemplateAsync(new Template("other", "1", "k", "", "Other.", "hand"), TemplateRoles.Champion, CancellationToken.None);
+        var problem = await admin.AddTemplateAsync(new Template("other", "1", "k", "", "Other.", "hand"), TemplateRoles.Champion, null, CancellationToken.None);
 
         Assert.Contains("already has a champion", problem, StringComparison.Ordinal);
     }

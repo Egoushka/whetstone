@@ -19,6 +19,9 @@ public sealed record RowFilter(string? Repository = null, DateTimeOffset? Before
     internal string? BeforeText => Before?.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 }
 
+/// <summary>What the owner did to a template, as <c>template_decisions</c> keeps it: the counts the report showed (JSON) and a note.</summary>
+public sealed record DecisionRecord(string? Counts, string? Note);
+
 /// <summary>
 /// What the commands <c>export</c> and <c>forget</c> do to one user's store (ADR 0003). Separate from <see cref="IStore"/> on
 /// purpose: the server and its tools hold only <see cref="IStore"/>, so no client and no agent can reach these. They never create
@@ -34,13 +37,13 @@ public interface IStoreAdmin
     Task<IReadOnlyList<Whetstone.Templates.TemplateRow>> TemplatesAsync(CancellationToken ct);
 
     /// <summary>Stores a new template version in <paramref name="role"/> (champion or challenger). Null when done, else why not.</summary>
-    Task<string?> AddTemplateAsync(Whetstone.Templates.Template version, string role, CancellationToken ct);
+    Task<string?> AddTemplateAsync(Whetstone.Templates.Template version, string role, DecisionRecord? decision, CancellationToken ct);
 
     /// <summary>Makes a kind's challenger its champion; the champion it replaces is retired, its record kept. Null when done, else why not.</summary>
-    Task<string?> PromoteTemplateAsync(string kind, string id, string version, CancellationToken ct);
+    Task<string?> PromoteTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct);
 
     /// <summary>Retires a champion or challenger, keeping its record; a kind left with no champion is held out entirely. Null when done, else why not.</summary>
-    Task<string?> RetireTemplateAsync(string kind, string id, string version, CancellationToken ct);
+    Task<string?> RetireTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct);
 
     /// <summary>Upgrades an older file and rebuilds the search index from the stored rows. Returns how many rows it covers.</summary>
     Task<int> ReindexAsync(CancellationToken ct);
@@ -52,6 +55,9 @@ public interface IStoreAdmin
     /// two past prompts that redact to the same text stay two.
     /// </summary>
     Task<string?> FindAsync(string importedId, string client, string prompt, DateTimeOffset at, TimeSpan within, CancellationToken ct);
+
+    /// <summary>Sets (or, with null, clears) the owner's hand label on one request. Null when done, else why not.</summary>
+    Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct);
 
     /// <summary>Deletes the matching rows and rewrites the file so their text is not left in it. Returns how many went.</summary>
     Task<int> ForgetAsync(RowFilter filter, CancellationToken ct);

@@ -45,7 +45,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
                    rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
-                   {(version >= 4 ? "arm" : "NULL")}, {rewards}
+                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -63,7 +63,8 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                         Flag(reader, 19), Count(reader, 20), Count(reader, 21), Count(reader, 22), Count(reader, 23), Count(reader, 24), Count(reader, 25),
                         Flag(reader, 26), Text(reader, 27),
                         Count(reader, 30), Flag(reader, 31), Flag(reader, 32), Flag(reader, 33), Flag(reader, 34), Text(reader, 35), Count(reader, 36),
-                        Count(reader, 37), Count(reader, 38)));
+                        Count(reader, 37), Count(reader, 38)),
+                Flag(reader, 39));
         }
     }
 
@@ -87,6 +88,12 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             Bind(delete, filter);
             deleted = await delete.ExecuteNonQueryAsync(ct);
         }
+        if (deleted > 0 && version >= 6)
+        {
+            await using var orphans = connection.CreateCommand();
+            orphans.CommandText = StoreSchema.ForgetOrphanedGymRows;
+            await orphans.ExecuteNonQueryAsync(ct);
+        }
         if (deleted > 0)
         {
             // The index kept the deleted words until it is rebuilt from what is left; do that before the pages are rewritten.
@@ -101,6 +108,21 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await vacuum.ExecuteNonQueryAsync(ct);
         }
         return deleted;
+    }
+
+    public async Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return "the store has no hand-label column yet; start the server once to upgrade it";
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE requests SET hand_label = $label WHERE request_id = $id";
+        command.Parameters.AddWithValue("$id", requestId);
+        command.Parameters.AddWithValue("$label", label is { } l ? l ? 1 : 0 : DBNull.Value);
+        return await command.ExecuteNonQueryAsync(ct) > 0 ? null : $"no stored request '{requestId}'";
     }
 
     public async Task<string?> FindAsync(string importedId, string client, string prompt, DateTimeOffset at, TimeSpan within, CancellationToken ct)
@@ -145,7 +167,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return found;
     }
 
-    public async Task<string?> AddTemplateAsync(Template version, string role, CancellationToken ct)
+    public async Task<string?> AddTemplateAsync(Template version, string role, DecisionRecord? decision, CancellationToken ct)
     {
         if (role is not (TemplateRoles.Champion or TemplateRoles.Challenger))
             return "a new template starts as a champion or a challenger";
@@ -178,10 +200,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             insert.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
             await insert.ExecuteNonQueryAsync(ct);
             return null;
-        }, ct);
+        }, ("add", version.Kind, version.Id, version.Version, decision), ct);
     }
 
-    public async Task<string?> PromoteTemplateAsync(string kind, string id, string version, CancellationToken ct) =>
+    public async Task<string?> PromoteTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct) =>
         await ChangeTemplatesAsync(async (connection, transaction) =>
         {
             var role = await RoleOfAsync(connection, transaction, kind, id, version, ct);
@@ -192,9 +214,9 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'retired' WHERE kind = $kind AND role = 'champion'", kind, null, null, ct);
             await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'champion' WHERE kind = $kind AND template_id = $id AND version = $version", kind, id, version, ct);
             return null;
-        }, ct);
+        }, ("promote", kind, id, version, decision), ct);
 
-    public async Task<string?> RetireTemplateAsync(string kind, string id, string version, CancellationToken ct) =>
+    public async Task<string?> RetireTemplateAsync(string kind, string id, string version, DecisionRecord? decision, CancellationToken ct) =>
         await ChangeTemplatesAsync(async (connection, transaction) =>
         {
             var role = await RoleOfAsync(connection, transaction, kind, id, version, ct);
@@ -204,9 +226,10 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                 return $"{id} v{version} is already retired";
             await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'retired' WHERE kind = $kind AND template_id = $id AND version = $version", kind, id, version, ct);
             return null;
-        }, ct);
+        }, ("retire", kind, id, version, decision), ct);
 
-    private async Task<string?> ChangeTemplatesAsync(Func<SqliteConnection, SqliteTransaction, Task<string?>> change, CancellationToken ct)
+    private async Task<string?> ChangeTemplatesAsync(
+        Func<SqliteConnection, SqliteTransaction, Task<string?>> change, (string Action, string Kind, string Id, string Version, DecisionRecord? Decision) done, CancellationToken ct)
     {
         if (!File.Exists(path))
             return "there is no store file yet";
@@ -216,9 +239,24 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             return "the store has no template table yet; start the server once to upgrade it";
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
         var problem = await change(connection, transaction);
-        if (problem is null)
-            await transaction.CommitAsync(ct);
-        return problem;
+        if (problem is not null)
+            return problem;
+        if (version >= 6)
+        {
+            await using var log = connection.CreateCommand();
+            log.Transaction = transaction;
+            log.CommandText = "INSERT INTO template_decisions (decided_at, kind, template_id, version, action, counts, note) VALUES ($at, $kind, $id, $version, $action, $counts, $note)";
+            log.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+            log.Parameters.AddWithValue("$kind", done.Kind);
+            log.Parameters.AddWithValue("$id", done.Id);
+            log.Parameters.AddWithValue("$version", done.Version);
+            log.Parameters.AddWithValue("$action", done.Action);
+            log.Parameters.AddWithValue("$counts", (object?)done.Decision?.Counts ?? DBNull.Value);
+            log.Parameters.AddWithValue("$note", (object?)done.Decision?.Note ?? DBNull.Value);
+            await log.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return null;
     }
 
     private static async Task<string?> RoleOfAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, string version, CancellationToken ct)

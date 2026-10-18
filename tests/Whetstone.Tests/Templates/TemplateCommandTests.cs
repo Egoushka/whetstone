@@ -100,4 +100,20 @@ public sealed class TemplateCommandTests : IDisposable
         Assert.Equal(Commands.Usage, run.Code);
         Assert.Single(rows);
     }
+
+    [Fact]
+    public async Task Every_change_writes_a_decision_with_the_counts_and_the_note()
+    {
+        await Champion();
+
+        await Run("add", "--kind", "typed/implement", "--id", "next", "--version", "1", "--after", "New text.", "--note", "try a shorter line");
+        await Run("promote", "--kind", "typed/implement", "--id", "next", "--version", "1");
+        await Run("retire", "--kind", "typed/implement", "--id", "next", "--version", "1", "--note", "tested badly");
+        await Run("retire", "--kind", "typed/implement", "--id", "missing", "--version", "1");
+
+        var rows = Db.Query(_data.FileFor("owner"), "SELECT action, template_id, version, counts, note FROM template_decisions ORDER BY decision_id");
+        Assert.Equal(["add", "promote", "retire"], rows.Select(r => (string)r["action"]!));
+        Assert.Equal(["try a shorter line", null, "tested badly"], rows.Select(r => (string?)r["note"]));
+        Assert.All(rows, r => Assert.Contains("\"Versions\"", (string)r["counts"]!, StringComparison.Ordinal));
+    }
 }

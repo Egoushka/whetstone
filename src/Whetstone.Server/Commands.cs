@@ -47,6 +47,65 @@ public static partial class Commands
 
     public const string ReindexUsage = "usage: whetstone reindex";
 
+    public const string LabelUsage = "usage: whetstone label list [--kind K] [--limit N] | whetstone label set REQUEST_ID yes|no|clear";
+
+    /// <summary>
+    /// The owner's hand labels (design, "Validity first"): <c>list</c> prints runs with a reported completion and no label, newest
+    /// first, with what the proxy says; <c>set</c> records the owner's verdict: the run completed without needing a re-ask.
+    /// </summary>
+    public static async Task<int> LabelAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        switch (options.ToArray())
+        {
+            case ["set", var id, var verdict, .. var rest]:
+                if (rest.Length > 0)
+                    return Refuse(error, $"unknown option '{rest[0]}'", LabelUsage);
+                if (verdict is not ("yes" or "no" or "clear"))
+                    return Refuse(error, $"a label is yes, no or clear, not '{verdict}'", LabelUsage);
+                bool? label = verdict == "clear" ? null : verdict == "yes";
+                try
+                {
+                    if (await admin.LabelAsync(id, label, ct) is { } problem)
+                        return Fail(error, "label", new InvalidOperationException(problem));
+                    await output.WriteAsync($"{id}: {verdict}\n");
+                    return Ok;
+                }
+                catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+                {
+                    return Fail(error, "label", e);
+                }
+            case ["list", .. var rest]:
+                if (!Parse(rest, ["--kind", "--limit"], [], out var parsed, out var listProblem))
+                    return Refuse(error, listProblem!, LabelUsage);
+                var limit = 20;
+                if (parsed!.TryGetValue("--limit", out var text) && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit < 1))
+                    return Refuse(error, "--limit is a whole number above 0", LabelUsage);
+                parsed.TryGetValue("--kind", out var kind);
+                try
+                {
+                    var candidates = new List<ExportRecord>();
+                    await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                        if (record is { HandLabel: null, Outcome.Completed: not null } && (kind is null || record.Context.TaskKind == kind))
+                            candidates.Add(record);
+                    foreach (var record in candidates.OrderByDescending(r => r.CreatedAt, StringComparer.Ordinal).Take(limit))
+                    {
+                        var run = TrialRun.From(record, CostWeights.Default);
+                        var excerpt = record.Prompt.ReplaceLineEndings(" ");
+                        await output.WriteAsync($"{record.RequestId}  {record.Context.TaskKind ?? "-"}  completed {Yes(run.Completed)}, rework {Yes(run.Rework)}  {(excerpt.Length > 100 ? excerpt[..100] + "..." : excerpt)}\n");
+                    }
+                    return Ok;
+                }
+                catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+                {
+                    return Fail(error, "label", e);
+                }
+            default:
+                return Refuse(error, "a label command is list or set", LabelUsage);
+        }
+    }
+
+    private static string Yes(bool? value) => value switch { true => "yes", false => "no", null => "-" };
+
     /// <summary>Upgrades the store file if it is an older version and rebuilds its search index from the stored requests.</summary>
     public static async Task<int> ReindexAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
     {
@@ -95,9 +154,9 @@ public static partial class Commands
 
     public const string TemplateUsage = """
         usage: whetstone template list
-               whetstone template add --kind K --id ID --version V --after TEXT [--before TEXT] [--source S] [--champion]
-               whetstone template promote --kind K --id ID --version V
-               whetstone template retire --kind K --id ID --version V
+               whetstone template add --kind K --id ID --version V --after TEXT [--before TEXT] [--source S] [--champion] [--note TEXT]
+               whetstone template promote --kind K --id ID --version V [--note TEXT]
+               whetstone template retire --kind K --id ID --version V [--note TEXT]
         """;
 
     /// <summary>
@@ -126,7 +185,7 @@ public static partial class Commands
                     return Ok;
                 case "add":
                     {
-                        if (!Parse(rest, ["--kind", "--id", "--version", "--before", "--after", "--source"], ["--champion"], out var add, out var problem))
+                        if (!Parse(rest, ["--kind", "--id", "--version", "--before", "--after", "--source", "--note"], ["--champion"], out var add, out var problem))
                             return Refuse(error, problem!, TemplateUsage);
                         if (!Identity(add!, out var kind, out var id, out var version, out problem))
                             return Refuse(error, problem!, TemplateUsage);
@@ -138,17 +197,17 @@ public static partial class Commands
                         if (template.Render("x", null) is null)
                             return Refuse(error, "the template cannot be rendered", TemplateUsage);
                         var role = add!.ContainsKey("--champion") ? TemplateRoles.Champion : TemplateRoles.Challenger;
-                        return Report(await admin.AddTemplateAsync(template, role, ct), $"Stored {id} v{version} for {kind} as {role}.", output, error);
+                        return Report(await admin.AddTemplateAsync(template, role, await DecisionAsync(admin, kind, add!, ct), ct), $"Stored {id} v{version} for {kind} as {role}.", output, error);
                     }
                 case "promote" or "retire":
                     {
-                        if (!Parse(rest, ["--kind", "--id", "--version"], [], out var change, out var problem))
+                        if (!Parse(rest, ["--kind", "--id", "--version", "--note"], [], out var change, out var problem))
                             return Refuse(error, problem!, TemplateUsage);
                         if (!Identity(change!, out var kind, out var id, out var version, out problem))
                             return Refuse(error, problem!, TemplateUsage);
                         return verb == "promote"
-                            ? Report(await admin.PromoteTemplateAsync(kind, id, version, ct), $"{id} v{version} is now the champion for {kind}; the previous champion is retired.", output, error)
-                            : Report(await admin.RetireTemplateAsync(kind, id, version, ct), $"{id} v{version} is retired for {kind}.", output, error);
+                            ? Report(await admin.PromoteTemplateAsync(kind, id, version, await DecisionAsync(admin, kind, change!, ct), ct), $"{id} v{version} is now the champion for {kind}; the previous champion is retired.", output, error)
+                            : Report(await admin.RetireTemplateAsync(kind, id, version, await DecisionAsync(admin, kind, change!, ct), ct), $"{id} v{version} is retired for {kind}.", output, error);
                     }
                 default:
                     return Refuse(error, $"unknown template command '{verb}'", TemplateUsage);
@@ -158,6 +217,20 @@ public static partial class Commands
         {
             return Fail(error, "template", e);
         }
+    }
+
+    /// <summary>What the report shows for the kind right now (runs per arm, per-version stats, looks), as JSON, with the owner's note.</summary>
+    private static async Task<DecisionRecord> DecisionAsync(IStoreAdmin admin, string kind, Dictionary<string, string> options, CancellationToken ct)
+    {
+        var runs = new List<TrialRun>();
+        await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+            if (record.Context.TaskKind == kind)
+                runs.Add(TrialRun.From(record, CostWeights.Default));
+        var stored = (await admin.TemplatesAsync(ct)).Where(t => t.Template.Kind == kind).ToList();
+        var report = Trials.Evaluate(kind, runs, new KindTemplates(
+            stored.FirstOrDefault(t => t.Role == TemplateRoles.Champion)?.Template, stored.FirstOrDefault(t => t.Role == TemplateRoles.Challenger)?.Template));
+        var counts = JsonSerializer.Serialize(new { report.Runs, report.Model, report.Counted, report.Looks, report.SampleRatio, report.Monitor, report.Versions });
+        return new DecisionRecord(counts, options.GetValueOrDefault("--note"));
     }
 
     private static bool Identity(Dictionary<string, string> options, out string kind, out string id, out string version, out string? problem)
@@ -216,7 +289,7 @@ public static partial class Commands
                 .Union(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
             var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None), settings.PersonTimeKinds)).ToList();
             var tracked = reports.Sum(r => r.Runs.Values.Sum());
-            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked));
+            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked, HandLabels.Of(records, settings.Weights)));
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)

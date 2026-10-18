@@ -20,6 +20,8 @@ const string Usage = """
                                             promotion rule says (reads only)
       template list|add|promote|retire      the owner's act on templates: add a challenger, promote it over the champion, retire
                                             a version (options: whetstone template without arguments)
+      label list [--kind K] [--limit N] | label set ID yes|no|clear
+                                            the owner's hand labels: did the run complete without a re-ask
       outcomes collect --root DIR [--forge github] [--confirm]
                                             delayed outcomes (commits, reverts, merged pull requests, first-push CI) for
                                             requests with a session, from the checkouts under DIR; counts until --confirm
@@ -98,6 +100,8 @@ switch (args)
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:
         return await Commands.ImportAsync(importOptions, stores.ForUser(user), stores.AdminFor(user), new GitHistory(), Console.Out, Console.Error, cts.Token);
+    case ["label", .. var labelOptions]:
+        return await Commands.LabelAsync(labelOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["outcomes", .. var outcomesOptions]:
         return await Commands.OutcomesAsync(outcomesOptions, stores.ForUser(user), stores.AdminFor(user), root => new GitOutcomes(root), new GitHubForge(),
             Console.Out, Console.Error, cts.Token);

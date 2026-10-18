@@ -53,6 +53,26 @@ public sealed record TrialSettings(CostWeights Weights, IReadOnlyList<string> Pe
     }
 }
 
+/// <summary>
+/// How the proxy "completed, and no rework" agrees with the owner's hand labels (design, "Validity first"): decisions are applied by
+/// hand until at least <see cref="Needed"/> runs are labelled and the proxy agrees with at least <see cref="Bar"/> of them.
+/// </summary>
+public sealed record HandLabels(int Labelled, int Compared, int Agree)
+{
+    public const int Needed = 30;
+
+    public const double Bar = 0.75;
+
+    public static HandLabels Of(IEnumerable<ExportRecord> records, CostWeights weights)
+    {
+        var labelled = records.Where(r => r.HandLabel is not null).ToList();
+        var compared = labelled.Select(r => (Label: r.HandLabel!.Value, Run: TrialRun.From(r, weights))).Where(x => x.Run.Completed is not null).ToList();
+        return new HandLabels(labelled.Count, compared.Count, compared.Count(x => x.Label == (x.Run.Completed == true && x.Run.Rework != true)));
+    }
+
+    public bool Trusted => Compared >= Needed && Agree >= Bar * Compared;
+}
+
 /// <summary>One run of a kind, reduced to what a trial compares.</summary>
 /// <param name="Reason">Why the next prompt corrected the run, when it did; it decides <see cref="Rework"/>.</param>
 /// <param name="ReviewFindings">Problems a reviewer found in the produced change.</param>
