@@ -89,10 +89,25 @@ public sealed partial record Template(string Id, string Version, string Kind, st
     }
 }
 
-/// <summary>The templates a kind has now: at most one champion and one challenger.</summary>
-public sealed record KindTemplates(Template? Champion, Template? Challenger)
+/// <summary>The templates a kind has now: at most one champion and up to <see cref="MaxChallengers"/> challengers.</summary>
+public sealed record KindTemplates(Template? Champion, IReadOnlyList<Template> Challengers)
 {
-    public static readonly KindTemplates None = new(null, null);
+    public static readonly KindTemplates None = new(null, (Template?)null);
+
+    /// <summary>With the 15% floor per arm (<see cref="Allocation.Floor"/>), the champion and this many challengers fill the non-held-out traffic.</summary>
+    public const int MaxChallengers = 5;
+
+    public KindTemplates(Template? champion, Template? challenger) : this(champion, challenger is null ? [] : [challenger])
+    {
+    }
+
+    /// <summary>The first challenger, or null; the one a kind with a single challenger has.</summary>
+    public Template? Challenger => Challengers.Count > 0 ? Challengers[0] : null;
+
+    public bool Equals(KindTemplates? other) =>
+        other is not null && Equals(Champion, other.Champion) && Challengers.SequenceEqual(other.Challengers);
+
+    public override int GetHashCode() => HashCode.Combine(Champion, Challengers.Count);
 }
 
 /// <summary>A template version as stored, with the role it has.</summary>
@@ -102,6 +117,13 @@ public sealed record TemplateRow(Template Template, string Role, DateTimeOffset 
 public interface ITemplates
 {
     Task<KindTemplates> ForKindAsync(string kind, CancellationToken ct);
+
+    /// <summary>
+    /// How each template version served to the kind's champion and challenger arms has done so far: completions that were not
+    /// reworked as wins, the rest of the reported runs as losses. Keyed by <see cref="Allocation.Key"/>. Empty from a store with no history.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, Tally>> TalliesAsync(string kind, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyDictionary<string, Tally>>(new Dictionary<string, Tally>());
 
     /// <summary>Stores versions that are not there yet; a version already stored is left as it is, role included.</summary>
     Task SeedAsync(IReadOnlyList<Template> templates, string role, CancellationToken ct);

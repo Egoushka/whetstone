@@ -149,7 +149,7 @@ public class TemplateTests
     [InlineData("")]
     public async Task A_request_with_no_kind_or_kind_other_is_not_templated_and_not_an_arm(string? kind)
     {
-        var answer = await Enhance(new FakeTemplates(new KindTemplates(Champion, null)), "id-1", new EnhanceContext(TaskKind: kind));
+        var answer = await Enhance(new FakeTemplates(new KindTemplates(Champion, (Template?)null)), "id-1", new EnhanceContext(TaskKind: kind));
 
         Assert.Equal((false, false, null), (answer.Changed, answer.HeldOut, answer.Arm));
     }
@@ -171,7 +171,7 @@ public class TemplateTests
         var bad = new Template("bad", "1", "agent/explore", "", "{{nope}}", TemplateSources.BuiltIn);
         var arms = new List<EnhanceResponse>();
         for (var i = 0; i < 40; i++)
-            arms.Add(await Enhance(new FakeTemplates(new KindTemplates(bad, null)), $"id-{i}"));
+            arms.Add(await Enhance(new FakeTemplates(new KindTemplates(bad, (Template?)null)), $"id-{i}"));
 
         Assert.All(arms.Where(a => a.Arm == Arms.Champion), a => Assert.Equal((false, null), (a.Changed, a.TemplateId)));
     }

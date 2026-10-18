@@ -232,7 +232,7 @@ public class TrialTests
         runs.AddRange(Many(Arms.Champion, champion, 0));
         runs.AddRange(Many(Arms.Challenger, challenger, 0));
         runs.AddRange(Many(Arms.HeldOut, held, 0));
-        var templates = withChallenger ? Both : new KindTemplates(Both.Champion, null);
+        var templates = withChallenger ? Both : new KindTemplates(Both.Champion, (Template?)null);
 
         var ratio = Trials.Evaluate("k", runs, templates).SampleRatio;
 
@@ -242,7 +242,7 @@ public class TrialTests
     [Fact]
     public void Too_few_runs_say_nothing_about_the_split_or_the_monitor()
     {
-        var report = Trials.Evaluate("k", [.. Many(Arms.Champion, 10, 5), .. Many(Arms.HeldOut, 2, 1)], new KindTemplates(Both.Champion, null));
+        var report = Trials.Evaluate("k", [.. Many(Arms.Champion, 10, 5), .. Many(Arms.HeldOut, 2, 1)], new KindTemplates(Both.Champion, (Template?)null));
 
         Assert.Null(report.SampleRatio);
         Assert.Null(report.Monitor);
@@ -251,7 +251,7 @@ public class TrialTests
     [Fact]
     public void A_champion_that_completes_less_often_than_the_held_out_arm_is_flagged_for_demotion()
     {
-        var report = Trials.Evaluate("k", [.. Many(Arms.Champion, 90, 45), .. Many(Arms.HeldOut, 40, 36, 1)], new KindTemplates(Both.Champion, null));
+        var report = Trials.Evaluate("k", [.. Many(Arms.Champion, 90, 45), .. Many(Arms.HeldOut, 40, 36, 1)], new KindTemplates(Both.Champion, (Template?)null));
 
         Assert.Contains("demote", report.Monitor!, StringComparison.Ordinal);
     }
@@ -259,7 +259,7 @@ public class TrialTests
     [Fact]
     public void A_champion_level_with_the_held_out_arm_shows_no_sign_of_harm()
     {
-        var report = Trials.Evaluate("k", [.. Many(Arms.Champion, 90, 72), .. Many(Arms.HeldOut, 40, 32, 1)], new KindTemplates(Both.Champion, null));
+        var report = Trials.Evaluate("k", [.. Many(Arms.Champion, 90, 72), .. Many(Arms.HeldOut, 40, 32, 1)], new KindTemplates(Both.Champion, (Template?)null));
 
         Assert.StartsWith("no sign of harm", report.Monitor!, StringComparison.Ordinal);
     }

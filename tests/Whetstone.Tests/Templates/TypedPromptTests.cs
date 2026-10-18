@@ -85,7 +85,7 @@ public class TypedPromptTests
     [Fact]
     public async Task A_short_typed_prompt_is_not_templated()
     {
-        var templates = new Found(new KindTemplates(Champion, null));
+        var templates = new Found(new KindTemplates(Champion, (Template?)null));
 
         var answer = await Typed(templates, "yes, go ahead");
 
@@ -96,7 +96,7 @@ public class TypedPromptTests
     [Fact]
     public async Task A_client_that_is_not_the_typed_one_gets_no_kind_from_its_words()
     {
-        var templates = new Found(new KindTemplates(Champion, null));
+        var templates = new Found(new KindTemplates(Champion, (Template?)null));
 
         await new TemplateEnhancer(new PassThrough(), templates).EnhanceAsync(
             new EnhanceRequest("Implement feature number 3 in the example service", new EnhanceContext(Client: "someone-else")), CancellationToken.None);

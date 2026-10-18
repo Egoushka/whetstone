@@ -327,7 +327,7 @@ public static partial class Commands
             var current = stored
                 .GroupBy(t => t.Template.Kind, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => new KindTemplates(
-                    g.FirstOrDefault(t => t.Role == TemplateRoles.Champion)?.Template, g.FirstOrDefault(t => t.Role == TemplateRoles.Challenger)?.Template), StringComparer.Ordinal);
+                    g.FirstOrDefault(t => t.Role == TemplateRoles.Champion)?.Template, [.. g.Where(t => t.Role == TemplateRoles.Challenger).Select(t => t.Template)]), StringComparer.Ordinal);
             var runs = records.Where(r => r.Context.TaskKind is not null)
                 .GroupBy(r => r.Context.TaskKind!, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.Select(r => TrialRun.From(r, settings.Weights)).ToList(), StringComparer.Ordinal);
