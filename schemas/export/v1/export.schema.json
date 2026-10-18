@@ -19,7 +19,8 @@
         "repository": { "type": "string" },
         "commit": { "type": "string" },
         "task_kind": { "type": "string" },
-        "client": { "type": "string" }
+        "client": { "type": "string" },
+        "session_id": { "type": "string", "description": "The client's opaque session id; an import stores a hash of the transcript's session id." }
       }
     },
     "answer": {
@@ -36,7 +37,7 @@
       }
     },
     "outcome": {
-      "description": "Null until the client reports through feedback; then what it reported. The first five fields are null when the client did not know; the run measures (completed to effort) are left out.",
+      "description": "Null until the client reports through feedback; then what it reported. The first five fields are null when the client did not know; the run and reward measures (completed to person_ms) are left out when not reported.",
       "oneOf": [
         { "type": "null" },
         {
@@ -58,6 +59,15 @@
             "tool_calls": { "type": "integer", "minimum": 0 },
             "asked_again": { "type": "boolean" },
             "effort": { "type": "string" },
+            "commits": { "type": "integer", "minimum": 0 },
+            "pr_merged": { "type": "boolean" },
+            "ci_first_push_green": { "type": "boolean" },
+            "reverted": { "type": "boolean" },
+            "item_closed": { "type": "boolean" },
+            "correction_reason": { "enum": ["wrong_target", "incomplete", "wrong_approach", "misread", "too_much", "style", "new_info", "stop", "other"] },
+            "review_findings": { "type": "integer", "minimum": 0 },
+            "review_findings_severe": { "type": "integer", "minimum": 0 },
+            "person_ms": { "type": "integer", "minimum": 0 },
             "reported_at": { "type": "string", "format": "date-time" }
           }
         }

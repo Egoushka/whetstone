@@ -5,12 +5,12 @@ namespace Whetstone.Storage;
 
 /// <summary>
 /// The file's tables and how an older file becomes the current one. Version 2 adds <c>source_request_id</c> (which stored request a
-/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. The index holds no text of its own: it points at <c>requests</c>, so a
+/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). The index holds no text of its own: it points at <c>requests</c>, so a
 /// row deleted there is deleted from the index in the same statement, and <c>forget</c> rebuilds it before the file is compacted.
 /// </summary>
 internal static class StoreSchema
 {
-    public const int Version = 4;
+    public const int Version = 5;
 
     /// <summary>The oldest file the commands can still read; the server upgrades it on first use.</summary>
     public const int OldestReadable = 1;
@@ -20,6 +20,13 @@ internal static class StoreSchema
     [
         ("completed", "INTEGER"), ("tokens_in", "INTEGER"), ("tokens_out", "INTEGER"), ("cache_read_tokens", "INTEGER"),
         ("cache_write_tokens", "INTEGER"), ("duration_ms", "INTEGER"), ("tool_calls", "INTEGER"), ("asked_again", "INTEGER"), ("effort", "TEXT"),
+    ];
+
+    /// <summary>The columns version 5 added, for a file that predates them.</summary>
+    private static readonly (string Column, string Type)[] Rewards =
+    [
+        ("session_id", "TEXT"), ("commits", "INTEGER"), ("pr_merged", "INTEGER"), ("ci_first_push_green", "INTEGER"), ("reverted", "INTEGER"),
+        ("item_closed", "INTEGER"), ("correction_reason", "TEXT"), ("review_findings", "INTEGER"), ("review_findings_severe", "INTEGER"), ("person_ms", "INTEGER"),
     ];
 
     private const string Requests = """
@@ -52,7 +59,17 @@ internal static class StoreSchema
           tool_calls INTEGER,
           asked_again INTEGER,
           effort TEXT,
-          arm TEXT
+          arm TEXT,
+          session_id TEXT,
+          commits INTEGER,
+          pr_merged INTEGER,
+          ci_first_push_green INTEGER,
+          reverted INTEGER,
+          item_closed INTEGER,
+          correction_reason TEXT,
+          review_findings INTEGER,
+          review_findings_severe INTEGER,
+          person_ms INTEGER
         );
         CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
         """;
@@ -115,6 +132,10 @@ internal static class StoreSchema
                 await Run(connection, transaction, $"ALTER TABLE requests ADD COLUMN {column} {type}", ct);
         if (found is 1 or 2 or 3)
             await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN arm TEXT", ct);
+        if (found is 1 or 2 or 3 or 4)
+            foreach (var (column, type) in Rewards)
+                await Run(connection, transaction, $"ALTER TABLE requests ADD COLUMN {column} {type}", ct);
+        await Run(connection, transaction, "CREATE INDEX IF NOT EXISTS requests_by_session ON requests (session_id, created_at)", ct);
         await Run(connection, transaction, Templates, ct);
         await Run(connection, transaction, Index, ct);
         await Run(connection, transaction, RebuildIndex, ct);

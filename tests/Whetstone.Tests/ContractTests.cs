@@ -42,6 +42,7 @@ public class ContractTests
     [InlineData("invalid-score-out-of-range.json")]
     [InlineData("invalid-negative-tokens.json")]
     [InlineData("invalid-measure-is-text.json")]
+    [InlineData("invalid-unknown-correction-reason.json")]
     public void Invalid_feedback_example_is_refused_by_the_embedded_schema(string name) =>
         Assert.NotEmpty(ContractSchemas.ValidateFeedback(JsonDocument.Parse(File.ReadAllText(Path.Combine(Examples, "feedback", "v1", "examples", name))).RootElement));
 

@@ -107,6 +107,24 @@ public sealed class CommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Reward_measures_and_the_session_reach_the_export()
+    {
+        var answer = new EnhanceResponse("add a retry", false, null, null, "", null, "req-1", false);
+        await _stores.ForUser("owner").RecordAsync(
+            RequestRow.From(new EnhanceRequest("add a retry", new EnhanceContext("example/app", null, "typed/implement", "test", "s-7f3a")), answer, Day1), CancellationToken.None);
+        var rewards = new FeedbackOutcome(Commits: 3, PrMerged: true, CiFirstPushGreen: false, Reverted: false, ItemClosed: true, CorrectionReason: "incomplete", ReviewFindings: 2, ReviewFindingsSevere: 0, PersonMs: 95000);
+        await _stores.ForUser("owner").RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", rewards), Day2), CancellationToken.None);
+
+        var line = Assert.Single(Lines((await Export()).Out));
+
+        Assert.Empty(ContractSchemas.ValidateExport(JsonDocument.Parse(line).RootElement));
+        var record = JsonSerializer.Deserialize<ExportRecord>(line, ContractJson.Options)!;
+        Assert.Equal("s-7f3a", record.Context.SessionId);
+        Assert.Equal((3L, true, false, false, true), (record.Outcome!.Commits, record.Outcome.PrMerged, record.Outcome.CiFirstPushGreen, record.Outcome.Reverted, record.Outcome.ItemClosed));
+        Assert.Equal(("incomplete", 2L, 0L, 95000L), (record.Outcome.CorrectionReason, record.Outcome.ReviewFindings, record.Outcome.ReviewFindingsSevere, record.Outcome.PersonMs));
+    }
+
+    [Fact]
     public async Task Export_filters_by_repository_and_by_date()
     {
         await SeedThree();

@@ -17,6 +17,9 @@ internal static class Db
     /// <summary>The columns <c>feedback</c> run measures are stored in.</summary>
     public static readonly string[] MeasureColumns = ["completed", "tokens_in", "tokens_out", "cache_read_tokens", "cache_write_tokens", "duration_ms", "tool_calls", "asked_again", "effort"];
 
+    /// <summary>The columns the reward measures are stored in (store schema 5).</summary>
+    public static readonly string[] RewardColumns = ["commits", "pr_merged", "ci_first_push_green", "reverted", "item_closed", "correction_reason", "review_findings", "review_findings_severe", "person_ms"];
+
     public static List<Dictionary<string, object?>> Query(string file, string sql)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());

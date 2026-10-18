@@ -170,6 +170,21 @@ public sealed class ImportTests : IDisposable
     }
 
     [Fact]
+    public async Task Prompts_of_one_session_share_a_session_id_that_is_not_the_transcripts()
+    {
+        Write("s1.jsonl", Typed("s1", "u1", 1, "make the parser accept tabs"), Typed("s1", "u2", 2, "and spaces"), Reply("s1", 3));
+        Write("s2.jsonl", Typed("s2", "v1", 5, "rename the config loader"), Reply("s2", 6));
+
+        await Import(null, "claude-code", _sessions, "--confirm");
+
+        var sessions = Rows().Select(r => (string)r["session_id"]!).ToList();
+        Assert.Equal(sessions[0], sessions[1]);
+        Assert.NotEqual(sessions[0], sessions[2]);
+        Assert.All(sessions, id => Assert.StartsWith("s-", id, StringComparison.Ordinal));
+        Assert.DoesNotContain(sessions, id => id is "s1" or "s2");
+    }
+
+    [Fact]
     public async Task Importing_twice_changes_nothing()
     {
         Write("s1.jsonl", Typed("s1", "u1", 1, "make the parser accept tabs"), Typed("s1", "u2", 2, "thanks"));

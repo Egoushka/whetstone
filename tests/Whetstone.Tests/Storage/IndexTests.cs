@@ -73,7 +73,7 @@ public sealed class IndexTests : IDisposable
         await Record("req-1", "stream the invoice parser");
         await Record("req-2", "rotate the signing certificate");
 
-        Assert.Equal(4L, Pragma(_data.FileFor("owner"), "user_version"));
+        Assert.Equal(5L, Pragma(_data.FileFor("owner"), "user_version"));
         Assert.Equal(["req-1"], Search("invoice"));
         Assert.Equal(["req-2"], Search("certificate"));
         Assert.Empty(Search("nothing"));
@@ -86,7 +86,7 @@ public sealed class IndexTests : IDisposable
 
         await Record("new-1", "another quokkaflux question");
 
-        Assert.Equal(4L, Pragma(file, "user_version"));
+        Assert.Equal(5L, Pragma(file, "user_version"));
         Assert.Equal(["new-1", "old-1"], Search("quokkaflux"));
         Assert.Equal(3, Db.Requests(file).Count);
         Assert.Contains(Db.Requests(file), r => (string)r["request_id"]! == "old-1" && (string)r["prompt"]! == "migrate the quokkaflux table" && r["source_request_id"] is null);
@@ -106,9 +106,30 @@ public sealed class IndexTests : IDisposable
 
         await Record("new-1", "after the upgrade");
 
-        Assert.Equal(4L, Pragma(file, "user_version"));
+        Assert.Equal(5L, Pragma(file, "user_version"));
         var old = Assert.Single(Db.Requests(file), r => (string)r["request_id"]! == "old-1");
         Assert.All(Db.MeasureColumns, c => Assert.Null(old[c]));
+    }
+
+    [Fact]
+    public async Task A_version_four_file_gains_the_session_and_reward_columns_and_keeps_its_rows()
+    {
+        var file = MakeVersionOneFile(("old-1", "keep this row", "example/app"));
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var upgrade = connection.CreateCommand();
+            var measures = string.Join(" ", Db.MeasureColumns.Select(c => $"ALTER TABLE requests ADD COLUMN {c};"));
+            upgrade.CommandText = $"ALTER TABLE requests ADD COLUMN source_request_id TEXT; {measures} ALTER TABLE requests ADD COLUMN arm TEXT; PRAGMA user_version = 4";
+            upgrade.ExecuteNonQuery();
+        }
+
+        await Record("new-1", "after the upgrade");
+
+        Assert.Equal(5L, Pragma(file, "user_version"));
+        var old = Assert.Single(Db.Requests(file), r => (string)r["request_id"]! == "old-1");
+        Assert.All(Db.RewardColumns.Append("session_id"), c => Assert.Null(old[c]));
+        Assert.Equal("keep this row", old["prompt"]);
     }
 
     [Fact]
@@ -209,7 +230,7 @@ public sealed class IndexTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Equal("Indexed 2 requests.\n", output.ToString());
-        Assert.Equal(4L, Pragma(file, "user_version"));
+        Assert.Equal(5L, Pragma(file, "user_version"));
         Assert.Equal(["old-1"], Search("quokkaflux"));
     }
 

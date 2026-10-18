@@ -24,7 +24,8 @@
             "repository": { "type": "string" },
             "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
             "task_kind": { "type": "string" },
-            "client": { "type": "string" }
+            "client": { "type": "string" },
+            "session_id": { "type": "string", "minLength": 1, "maxLength": 128, "description": "An opaque id the client chooses for the session; requests that share it share a session." }
           }
         },
         "deadline_ms": { "type": "integer", "minimum": 50, "maximum": 30000, "default": 1500 }
