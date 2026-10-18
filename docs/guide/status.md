@@ -28,17 +28,18 @@ section: "Project"
 | Retrieval in real use, 50 rewrites at 40% acceptance (the 0.3 bar) | not pursued | [ADR 0004](../adr/0004-every-prompt-templates-and-trials.md) |
 | Agent-written prompts captured with run measures (0.4) | partial | [AgentImportTests.cs](../../tests/Whetstone.Tests/Import/AgentImportTests.cs), [the design](../specs/2026-10-10-templates-everywhere-design.md) |
 | Templates per kind and trials (0.5) | partial | [TemplateTests.cs](../../tests/Whetstone.Tests/Templates/TemplateTests.cs), [TrialTests.cs](../../tests/Whetstone.Tests/Templates/TrialTests.cs), [ReportTests.cs](../../tests/Whetstone.Tests/Templates/ReportTests.cs) |
-| Reward signals: delayed outcomes, correction reasons, review findings, person time (0.6) | not yet | [the design](../specs/2026-10-19-reward-signals-design.md) |
-| Challengers written by a model, bandit allocation, trait trials (0.7) | not yet | [the design](../specs/2026-10-19-evidence-volume-design.md) |
+| Reward signals: delayed outcomes, correction reasons, review findings, person time (0.6) | partial | [the design](../specs/2026-10-19-reward-signals-design.md) |
+| Challengers written by a model, bandit allocation, trait trials (0.7) | partial | [the design](../specs/2026-10-19-evidence-volume-design.md) |
 | Import of Claude Code sessions with an implicit score | works | [ImportTests.cs](../../tests/Whetstone.Tests/Import/ImportTests.cs) |
 | Removing stored prompts by content (`forget --text`) | works | [CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs) |
-| Import from other agents and from a memory service (part of 0.7) | not yet | [ROADMAP.md](../../ROADMAP.md) |
-| Replay gym, context slots, levels and routing, person-facing help, agent structure (0.8 to 0.12) | not yet | [ROADMAP.md](../../ROADMAP.md) |
+| Import from OpenCode (part of 0.7) | works | [ROADMAP.md](../../ROADMAP.md) |
+| Replay gym: case selection, pairs, screen (0.8) | partial |
+| Context slots, levels and routing, person-facing help, agent structure (0.9 to 0.12) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | A stable contract (1.0) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | Serving beyond loopback from the command line | not yet | [Program.cs](../../src/Whetstone.Server/Program.cs) |
 | A release binary or package | not yet | [going-public.md](../going-public.md) |
 
-The audit script is `partial`: the changelog says its author checked it once by hand against an unredacted token, and no automated test runs it ([CHANGELOG.md](../../CHANGELOG.md)). The 0.2 bar is `met`: its tests pass, and after a week of the owner's use (2026-10-04 to 2026-10-11) the audit over the owner's store found nothing on 2026-10-12. Goals 0.4 and 0.5 are `partial`: the import and the trials are built and tested, and their bars need live use measured with `whetstone report`.
+The audit script is `partial`: the changelog says its author checked it once by hand against an unredacted token, and no automated test runs it ([CHANGELOG.md](../../CHANGELOG.md)). The 0.2 bar is `met`: its tests pass, and after a week of the owner's use (2026-10-04 to 2026-10-11) the audit over the owner's store found nothing on 2026-10-12. Goals 0.4 to 0.7 are `partial`: their code is built and tested, and their bars need live use measured with `whetstone report`. The gym (0.8) is `partial`: selection, pairs and the screen are tested with a fake client; no real gym client exists yet.
 
 ## What `enhance` returns
 
