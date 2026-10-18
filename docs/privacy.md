@@ -44,6 +44,7 @@ Nothing else: no file contents, no model answers, no other users' data.
   its tools touched or by text keeps these out as well. `--exclude` and `--exclude-text` keep whole sessions out by folder or by content, and
   `forget --text` removes stored rows by content. Message and session ids from the transcript are not stored.
 - **Outbound calls.** The only outbound call is to the rewriting model the user configures (goal 0.7), and only the
-  redacted prompt and the chosen template are sent. Planned for goal 0.9: the owner's own memory service, sent memory
-  ids and a verdict, never prompt text (docs/specs/2026-10-19-context-slots-design.md).
+  redacted prompt and the chosen template are sent. Planned for goal 0.9: a recall query to the owner's own memory
+  service, nothing written back (docs/specs/2026-10-19-context-slots-design.md); for goal 0.8, replays of stored redacted
+  prompts through a gym client, which needs an amendment here first (docs/specs/2026-10-19-replay-gym-design.md).
 - **This repository holds no real prompt.** Tests and examples use invented ones.
