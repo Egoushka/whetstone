@@ -18,10 +18,18 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
     /// <summary>Lookups that failed or ran out of time since the process started.</summary>
     public long Failures => Interlocked.Read(ref _failures);
 
+    /// <summary>The kind the client sent, or, for a typed Claude Code prompt that came with none, the one its opening words give; null when not templated.</summary>
+    private static string? KindOf(EnhanceRequest request)
+    {
+        var kind = request.Context?.TaskKind is { Length: > 0 } sent ? sent
+            : request.Context?.Client == PromptKinds.TypedClient ? PromptKinds.ForTyped(request.Prompt) : null;
+        return kind is null or PromptKinds.Other ? null : kind;
+    }
+
     public async Task<EnhanceResponse> EnhanceAsync(EnhanceRequest request, CancellationToken ct)
     {
         var answer = await inner.EnhanceAsync(request, ct);
-        if (request.Context?.TaskKind is not { Length: > 0 } kind || kind == PromptKinds.Other)
+        if (KindOf(request) is not { } kind)
             return answer;
         try
         {
@@ -34,7 +42,7 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
             return held with
             {
                 Prompt = prompt,
-                Changed = true,
+                Changed = prompt != answer.Prompt,
                 TemplateId = chosen.Id,
                 TemplateVersion = chosen.Version,
                 Reason = $"template: {chosen.Id} v{chosen.Version} ({arm})",

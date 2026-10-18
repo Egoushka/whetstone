@@ -67,6 +67,7 @@ if (Environment.GetEnvironmentVariable("WHETSTONE_TEMPLATES") is "on")
     // Seeding adds the shipped champions to kinds that have none; a version already stored keeps its role.
     var templates = stores.TemplatesFor(user);
     await templates.SeedAsync(BuiltInTemplates.All, TemplateRoles.Champion, cts.Token);
+    await templates.SeedAsync(BuiltInTemplates.TypedChallengers, TemplateRoles.Challenger, cts.Token);
     enhancer = new TemplateEnhancer(enhancer, templates);
 }
 // The reason is an exception type: a message may quote a prompt.
