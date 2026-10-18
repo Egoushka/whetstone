@@ -9,11 +9,48 @@ public sealed record CostWeights(double Input, double CacheWrite, double CacheRe
     /// <summary>Starting weights (design, "Promotion rule"); update them when the provider's prices change.</summary>
     public static readonly CostWeights Default = new(1, 1.25, 0.1, 5);
 
+    /// <summary>
+    /// Weights from a setting such as <c>WHETSTONE_COST_WEIGHTS</c>: four numbers of 0 or more, input, cache write, cache read and
+    /// output, separated by commas. Empty means <see cref="Default"/>; anything else that does not read is null.
+    /// </summary>
+    public static CostWeights? Parse(string? setting)
+    {
+        if (string.IsNullOrWhiteSpace(setting))
+            return Default;
+        var parts = setting.Split(',', StringSplitOptions.TrimEntries);
+        var values = new double[parts.Length];
+        for (var i = 0; i < parts.Length; i++)
+            if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out values[i]) || values[i] < 0 || !double.IsFinite(values[i]))
+                return null;
+        return values.Length == 4 ? new CostWeights(values[0], values[1], values[2], values[3]) : null;
+    }
+
     /// <summary>The run's cost, or null when any of the four token counts is missing: a partial cost would compare unlike things.</summary>
     public double? Of(ExportOutcome? outcome) =>
         outcome is { TokensIn: { } input, TokensOut: { } output, CacheReadTokens: { } read, CacheWriteTokens: { } write }
             ? (input * Input) + (write * CacheWrite) + (read * CacheRead) + (output * Output)
             : null;
+}
+
+/// <summary>The settings a report reads: <c>WHETSTONE_COST_WEIGHTS</c> and <c>WHETSTONE_PERSON_TIME_KINDS</c> (comma-separated kind prefixes).</summary>
+public sealed record TrialSettings(CostWeights Weights, IReadOnlyList<string> PersonTimeKinds)
+{
+    public static readonly TrialSettings Default = new(CostWeights.Default, CostMeasure.PersonTimeKinds);
+
+    /// <summary>The settings, or null with the reason when one does not read.</summary>
+    public static TrialSettings? From(Func<string, string?> setting, out string? problem)
+    {
+        problem = null;
+        if (CostWeights.Parse(setting("WHETSTONE_COST_WEIGHTS")) is not { } weights)
+        {
+            problem = "WHETSTONE_COST_WEIGHTS is four numbers of 0 or more, input, cache write, cache read and output, such as 1,1.25,0.1,5";
+            return null;
+        }
+        var kinds = setting("WHETSTONE_PERSON_TIME_KINDS") is { } named
+            ? named.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            : [.. CostMeasure.PersonTimeKinds];
+        return new TrialSettings(weights, kinds);
+    }
 }
 
 /// <summary>One run of a kind, reduced to what a trial compares.</summary>
@@ -22,7 +59,8 @@ public sealed record CostWeights(double Input, double CacheWrite, double CacheRe
 public sealed record TrialRun(
     DateTimeOffset At, string? Arm, bool? Completed, bool? AskedAgain, double? Cost, long? DurationMs, string? Model,
     string? TemplateId = null, string? TemplateVersion = null, long? TokensIn = null, long? TokensOut = null, long? CacheReadTokens = null,
-    string? Reason = null, long? PersonMs = null, long? ReviewFindings = null, bool? Reverted = null, bool? CiFirstPushGreen = null)
+    string? Reason = null, long? PersonMs = null, long? ReviewFindings = null, bool? Reverted = null, bool? CiFirstPushGreen = null,
+    long? CacheWriteTokens = null)
 {
     /// <summary>
     /// A correction that blames the prompt or the run (reward design, decision 2). With no reason reported, <c>asked_again</c> stands
@@ -35,7 +73,8 @@ public sealed record TrialRun(
         record.Answer.Arm ?? (record.Answer.HeldOut ? Arms.HeldOut : null),
         record.Outcome?.Completed, record.Outcome?.AskedAgain, weights.Of(record.Outcome), record.Outcome?.DurationMs, record.Outcome?.Model,
         record.Answer.TemplateId, record.Answer.TemplateVersion, record.Outcome?.TokensIn, record.Outcome?.TokensOut, record.Outcome?.CacheReadTokens,
-        record.Outcome?.CorrectionReason, record.Outcome?.PersonMs, record.Outcome?.ReviewFindings, record.Outcome?.Reverted, record.Outcome?.CiFirstPushGreen);
+        record.Outcome?.CorrectionReason, record.Outcome?.PersonMs, record.Outcome?.ReviewFindings, record.Outcome?.Reverted, record.Outcome?.CiFirstPushGreen,
+        record.Outcome?.CacheWriteTokens);
 }
 
 /// <summary>
@@ -48,10 +87,11 @@ public sealed record CostMeasure(string Name, Func<TrialRun, double?> Of)
 
     public static readonly CostMeasure PersonTime = new("person time", r => r.PersonMs);
 
-    /// <summary>Kinds whose name starts with one of these prefixes are judged on the person's time.</summary>
+    /// <summary>Kinds whose name starts with one of these prefixes are judged on the person's time, unless a setting names others.</summary>
     public static readonly IReadOnlyList<string> PersonTimeKinds = ["typed/"];
 
-    public static CostMeasure For(string kind) => PersonTimeKinds.Any(p => kind.StartsWith(p, StringComparison.Ordinal)) ? PersonTime : RunCost;
+    public static CostMeasure For(string kind, IReadOnlyList<string>? personTimeKinds = null) =>
+        (personTimeKinds ?? PersonTimeKinds).Any(p => kind.StartsWith(p, StringComparison.Ordinal)) ? PersonTime : RunCost;
 }
 
 /// <summary>
@@ -70,12 +110,13 @@ public sealed record LookResult(int Runs, int ChampionRuns, double Z, string Ver
 /// <summary>Everything the report says about one kind.</summary>
 public sealed record KindReport(
     string Kind, KindTemplates Templates, IReadOnlyDictionary<string, int> Runs, string? Model, IReadOnlyDictionary<string, ArmStats> Counted,
-    IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor, IReadOnlyList<VersionStats>? Versions = null, string CostMeasure = "run cost");
+    IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor, IReadOnlyList<VersionStats>? Versions = null, string CostMeasure = "run cost",
+    string? Cache = null);
 
 /// <summary>An arm's counted runs: those with a completion, in the model's evidence window.</summary>
 public sealed record ArmStats(
     int Runs, int Completed, double? MedianCost, int Costed, double? MedianDurationMs,
-    int ReworkReported = 0, int Rework = 0, double? MedianPersonMs = null, int PersonTimed = 0);
+    int ReworkReported = 0, int Rework = 0, double? MedianPersonMs = null, int PersonTimed = 0, double? CacheReadShare = null, int CacheMeasured = 0);
 
 /// <summary>
 /// The promotion rule of docs/specs/2026-10-10-templates-everywhere-design.md, as arithmetic: fixed looks, a z test on completion,
@@ -99,9 +140,12 @@ public static class Trials
     private const double ChiSquareCriticalTwo = 13.816; // p = 0.001, 2 degrees of freedom
     private const double ChiSquareCriticalOne = 10.828; // p = 0.001, 1 degree of freedom
 
-    public static KindReport Evaluate(string kind, IReadOnlyList<TrialRun> all, KindTemplates templates)
+    /// <summary>How many points lower an arm's cache-read share may be than the arm it is compared with before the report flags it.</summary>
+    public const double CacheShareDrop = 0.10;
+
+    public static KindReport Evaluate(string kind, IReadOnlyList<TrialRun> all, KindTemplates templates, IReadOnlyList<string>? personTimeKinds = null)
     {
-        var measure = CostMeasure.For(kind);
+        var measure = CostMeasure.For(kind, personTimeKinds);
         var runs = all.GroupBy(r => r.Arm ?? "none").ToDictionary(g => g.Key, g => g.Count());
         var (counted, model) = Window(all);
         var byArm = counted.GroupBy(r => r.Arm ?? "none").ToDictionary(g => g.Key, g => g.OrderBy(r => r.At).ToList());
@@ -116,7 +160,7 @@ public static class Trials
             looks.Add(Decide(look, [.. challenger.Take(look)], [.. champion.Where(r => r.At <= cutoff)], measure));
         }
         return new KindReport(kind, templates, runs, model, stats, looks, SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0),
-            Monitor(champion, Of(Arms.HeldOut), measure), PerVersion(all), measure.Name);
+            Monitor(champion, Of(Arms.HeldOut), measure), PerVersion(all), measure.Name, Cache(stats));
     }
 
     /// <summary>
@@ -157,8 +201,29 @@ public static class Trials
         var durations = runs.Where(r => r.DurationMs is not null).Select(r => (double)r.DurationMs!.Value).ToList();
         var person = runs.Where(r => r.PersonMs is not null).Select(r => (double)r.PersonMs!.Value).ToList();
         var rework = runs.Where(r => r.Rework is not null).ToList();
+        var cached = runs.Where(r => r is { TokensIn: not null, CacheReadTokens: not null, CacheWriteTokens: not null }).ToList();
+        var read = cached.Sum(r => (double)r.CacheReadTokens!.Value);
+        var prompt = cached.Sum(r => (double)(r.TokensIn!.Value + r.CacheReadTokens!.Value + r.CacheWriteTokens!.Value));
         return new ArmStats(runs.Count, runs.Count(r => r.Completed == true), Median(costs), costs.Count, Median(durations),
-            rework.Count, rework.Count(r => r.Rework == true), Median(person), person.Count);
+            rework.Count, rework.Count(r => r.Rework == true), Median(person), person.Count, prompt > 0 ? read / prompt : null, cached.Count);
+    }
+
+    /// <summary>
+    /// The cache-read share of prompt tokens (reward design, decision 5): a template whose text breaks the cached prefix costs more even
+    /// when its token counts look equal. Flags the challenger against the champion and the champion against the held-out arm, each
+    /// once both have <see cref="MinCompared"/> runs with cache measures.
+    /// </summary>
+    private static string? Cache(IReadOnlyDictionary<string, ArmStats> stats)
+    {
+        foreach (var (arm, baseline) in new[] { (Arms.Challenger, Arms.Champion), (Arms.Champion, Arms.HeldOut) })
+        {
+            if (stats.GetValueOrDefault(arm) is not { CacheReadShare: { } share, CacheMeasured: >= MinCompared }
+                || stats.GetValueOrDefault(baseline) is not { CacheReadShare: { } against, CacheMeasured: >= MinCompared })
+                continue;
+            if (against - share > CacheShareDrop)
+                return $"the {arm.Replace('_', ' ')} arm reads {Share(share)} of prompt tokens from the cache against {Share(against)} for the {baseline.Replace('_', ' ')} arm: its text may break the cached prefix";
+        }
+        return null;
     }
 
     private static LookResult Decide(int look, List<TrialRun> challenger, List<TrialRun> champion, CostMeasure measure)

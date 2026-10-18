@@ -170,6 +170,47 @@ public class TrialTests
         Assert.Equal("promote", Assert.Single(Trials.Evaluate("k", [.. champion, .. better], Both).Looks).Verdict);
     }
 
+    [Theory]
+    [InlineData(null, 1, 1.25, 0.1, 5)]
+    [InlineData("", 1, 1.25, 0.1, 5)]
+    [InlineData("3, 3.75, 0.3, 15", 3, 3.75, 0.3, 15)]
+    public void Cost_weights_read_from_a_setting(string? setting, double input, double write, double read, double output) =>
+        Assert.Equal(new CostWeights(input, write, read, output), CostWeights.Parse(setting));
+
+    [Theory]
+    [InlineData("1,2,3")]
+    [InlineData("1,2,3,x")]
+    [InlineData("1,2,-1,4")]
+    public void A_cost_weight_setting_that_does_not_read_is_refused(string setting) => Assert.Null(CostWeights.Parse(setting));
+
+    [Fact]
+    public void Person_time_kinds_come_from_the_setting_when_given()
+    {
+        var settings = TrialSettings.From(name => name == "WHETSTONE_PERSON_TIME_KINDS" ? "orchestrator/, typed/review" : null, out var problem)!;
+
+        Assert.Null(problem);
+        Assert.Equal("person time", CostMeasure.For("orchestrator/turn", settings.PersonTimeKinds).Name);
+        Assert.Equal("run cost", CostMeasure.For("typed/implement", settings.PersonTimeKinds).Name);
+        Assert.Null(TrialSettings.From(name => name == "WHETSTONE_COST_WEIGHTS" ? "nope" : null, out problem));
+        Assert.Contains("WHETSTONE_COST_WEIGHTS", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_challenger_that_reads_much_less_from_the_cache_is_flagged()
+    {
+        static IEnumerable<TrialRun> Cached(IEnumerable<TrialRun> runs, long read, long write) =>
+            runs.Select(r => r with { TokensIn = 1000, CacheReadTokens = read, CacheWriteTokens = write });
+        var champion = Cached(Many(Arms.Champion, 40, 30), 9000, 0);
+        var breaks = Cached(Many(Arms.Challenger, 30, 22, 1), 6000, 3000);
+        var keeps = Cached(Many(Arms.Challenger, 30, 22, 1), 8800, 200);
+
+        var flagged = Trials.Evaluate("k", [.. champion, .. breaks], Both);
+
+        Assert.Equal(0.9, flagged.Counted[Arms.Champion].CacheReadShare!.Value, 3);
+        Assert.Contains("challenger arm reads 60%", flagged.Cache!, StringComparison.Ordinal);
+        Assert.Null(Trials.Evaluate("k", [.. champion, .. keeps], Both).Cache);
+    }
+
     [Fact]
     public void The_bootstrap_interval_repeats_exactly()
     {
