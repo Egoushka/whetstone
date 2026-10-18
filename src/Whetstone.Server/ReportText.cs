@@ -23,11 +23,14 @@ internal static class ReportText
             }
             else
             {
-                text.Append("  counted runs (").Append(kind.Model is { } model ? $"model {model}" : "no model reported").Append("):\n");
+                text.Append("  counted runs (").Append(kind.Model is { } model ? $"model {model}" : "no model reported")
+                    .Append("; a cost-only decision compares ").Append(kind.CostMeasure).Append("):\n");
                 foreach (var (arm, stats) in kind.Counted.OrderBy(a => a.Key, StringComparer.Ordinal))
                     text.Append("    ").Append(arm.Replace('_', ' ')).Append(CultureInfo.InvariantCulture, $": {stats.Runs} runs, completed {Percent(stats.Completed, stats.Runs)}")
                         .Append(stats.MedianCost is { } cost ? $", median cost {cost:0} (of {stats.Costed} runs)" : "")
-                        .Append(stats.MedianDurationMs is { } ms ? $", median duration {ms / 1000:0.#} s" : "").Append('\n');
+                        .Append(stats.MedianDurationMs is { } ms ? $", median duration {ms / 1000:0.#} s" : "")
+                        .Append(stats.ReworkReported > 0 ? $", rework {Percent(stats.Rework, stats.ReworkReported)}" : "")
+                        .Append(stats.MedianPersonMs is { } person ? $", median person time {person / 1000:0.#} s (of {stats.PersonTimed} runs)" : "").Append('\n');
             }
             AppendVersions(text, kind);
             if (kind.SampleRatio is { } ratio)
@@ -54,9 +57,11 @@ internal static class ReportText
             text.Append("    ").Append(name).Append(current).Append(CultureInfo.InvariantCulture, $": {v.Uses} uses, {v.Reported} with an outcome")
                 .Append(v.Reported > 0 ? $", completed {Percent(v.Completed, v.Reported)}" : "")
                 .Append(v.AskedAgainReported > 0 ? $", asked again {Percent(v.AskedAgain, v.AskedAgainReported)}" : "")
+                .Append(v.ReworkReported > 0 ? $", rework {Percent(v.Rework, v.ReworkReported)}" : "")
                 .Append(Median("tokens in", v.MedianTokensIn)).Append(Median("out", v.MedianTokensOut)).Append(Median("cache read", v.MedianCacheReadTokens))
                 .Append(v.MedianDurationMs is { } ms ? $", median {ms / 1000:0.#} s" : "")
-                .Append(v.MedianCost is { } cost ? $", median cost {cost:0}" : "").Append('\n');
+                .Append(v.MedianCost is { } cost ? $", median cost {cost:0}" : "")
+                .Append(v.MedianPersonMs is { } person ? $", median person time {person / 1000:0.#} s" : "").Append('\n');
         }
         if (kind.Templates.Challenger is { } challenger)
         {

@@ -161,6 +161,22 @@ public sealed class ReportTests : IDisposable
     }
 
     [Fact]
+    public async Task Report_shows_rework_person_time_and_the_cost_measure_of_a_typed_kind()
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            await Record($"t{i}", "typed/implement", Arms.Champion, At.AddMinutes(i), completed: true);
+            var outcome = new FeedbackOutcome(PersonMs: 30_000 + (i * 10_000), AskedAgain: true, CorrectionReason: i == 0 ? "incomplete" : "new_info");
+            await _stores.ForUser("owner").RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest($"t{i}", outcome), At.AddMinutes(i + 2)), CancellationToken.None);
+        }
+
+        var text = await Report();
+
+        Assert.Contains("a cost-only decision compares person time", text, StringComparison.Ordinal);
+        Assert.Contains("rework 25% (1/4), median person time 45 s (of 4 runs)", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Report_on_an_empty_or_missing_store_says_so_and_creates_nothing()
     {
         var text = await Report();
