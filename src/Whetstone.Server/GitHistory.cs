@@ -44,11 +44,21 @@ public sealed class GitHistory : IRepositoryHistory
         return _known[workingDirectory] = (string.IsNullOrEmpty(checkout) ? null : checkout, string.IsNullOrEmpty(email) ? null : email);
     }
 
-    private static string? Git(string directory, params string[] args)
+    internal static string? Git(string directory, params string[] args) => Run("git", directory, args);
+
+    /// <summary>A command run in a directory with a 10-second limit: its trimmed output, or null on any failure.</summary>
+    internal static string? Run(string program, string directory, params string[] args)
     {
-        var start = new ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-        start.ArgumentList.Add("-C");
-        start.ArgumentList.Add(directory);
+        var start = new ProcessStartInfo(program) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        if (program == "git")
+        {
+            start.ArgumentList.Add("-C");
+            start.ArgumentList.Add(directory);
+        }
+        else
+        {
+            start.WorkingDirectory = directory;
+        }
         foreach (var arg in args)
             start.ArgumentList.Add(arg);
         try

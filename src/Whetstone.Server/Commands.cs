@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Whetstone.Contracts;
 using Whetstone.Import;
+using Whetstone.Outcomes;
 using Whetstone.Retrieval;
 using Whetstone.Storage;
 using Whetstone.Templates;
@@ -264,6 +265,54 @@ public static partial class Commands
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
         {
             return Fail(error, "import", e);
+        }
+    }
+
+    public const string OutcomesUsage = "usage: whetstone outcomes collect --root DIR [--forge github] [--confirm]";
+
+    /// <summary>
+    /// Fills delayed outcomes (commits, reverts and, with a forge, merged pull requests and first-push CI) for stored requests that
+    /// have a session and a repository, from the checkouts under DIR (docs/specs/2026-10-19-reward-signals-design.md). Counts until
+    /// <c>--confirm</c>; then reports them through the store like a client's <c>feedback</c>.
+    /// </summary>
+    public static async Task<int> OutcomesAsync(
+        IReadOnlyList<string> options, IStore store, IStoreAdmin admin, Func<string, ICommitHistory> historyAt, IForge? github,
+        TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count == 0 || options[0] != "collect")
+            return Refuse(error, "say what to do: collect", OutcomesUsage);
+        if (!Parse([.. options.Skip(1)], ["--root", "--forge"], ["--confirm"], out var parsed, out var problem))
+            return Refuse(error, problem!, OutcomesUsage);
+        if (!parsed!.TryGetValue("--root", out var root))
+            return Refuse(error, "--root is needed: the folder that holds the checkouts", OutcomesUsage);
+        if (!Directory.Exists(root))
+            return Refuse(error, $"no directory '{root}'", OutcomesUsage);
+        if (parsed.TryGetValue("--forge", out var forge) && forge != "github")
+            return Refuse(error, $"unknown forge '{forge}'; the one known is github", OutcomesUsage);
+        var write = parsed.ContainsKey("--confirm");
+        try
+        {
+            var records = new List<ExportRecord>();
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                records.Add(record);
+            var now = DateTimeOffset.UtcNow;
+            var found = DelayedOutcomes.Collect(records, historyAt(root), forge is null ? null : github, now, out var report);
+            await output.WriteAsync(
+                $"{report.Requests} requests with a session and a repository whose window has closed: {report.Located} in a checkout found under the root, "
+                + $"{report.Measured} measured, {report.WithCommits} with commits; {report.Merged} in a merged pull request, {report.Reverted} reverted.\n");
+            if (!write)
+            {
+                await output.WriteAsync("Nothing was stored. Add --confirm to store them.\n");
+                return Ok;
+            }
+            foreach (var outcome in found)
+                await store.RecordOutcomeAsync(OutcomeRow.From(outcome, now), ct);
+            await output.WriteAsync($"Stored delayed outcomes for {found.Count} requests.\n");
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return Fail(error, "outcomes", e);
         }
     }
 
