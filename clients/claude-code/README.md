@@ -15,6 +15,12 @@ Sends the prompts you type through whetstone (ADR 0005), shows what changed, and
 The key is read from the login keychain item `whetstone-api-key` once per session and kept in memory. The server is
 `http://127.0.0.1:7340/v1/mcp` (`hooks/client.ts`).
 
-Load it: `claude --plugin-dir clients/claude-code`, or copy the folder under the mods folder (`~/.claude/dev-mods/<id>/whetstone`).
+Install it (typed in a session; needs the whetstone agent running and its key in the keychain):
+
+```
+/plugin install whetstone --marketplace Egoushka/whetstone
+```
+
+Or load it for one session: `claude --plugin-dir clients/claude-code`, or copy the folder under the mods folder (`~/.claude/dev-mods/<id>/whetstone`).
 Check it: `claude plugin validate clients/claude-code`; run the tests from a copy outside any dot-folder
 (`claude plugin test` finds no tests under `.claude/worktrees`): `cp -R clients/claude-code "$TMPDIR/whetstone" && claude plugin test "$TMPDIR/whetstone"`.
