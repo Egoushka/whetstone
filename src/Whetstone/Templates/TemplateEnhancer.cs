@@ -57,7 +57,9 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
                 : (Arms.Assign(kind, answer.RequestId, found.Challenger is not null), 0);
             var chosen = arm switch { Arms.Champion => found.Champion, Arms.Challenger => found.Challengers[index], _ => null };
             var held = answer with { HeldOut = arm == Arms.HeldOut, TaskKind = kind, Arm = arm };
-            if (chosen is null || chosen.Render(answer.Prompt, request.Context) is not { } prompt)
+            // The filler stripper is the one source that changes the original, by deleting listed phrases; the answer names them.
+            var (stripped, removed) = chosen?.Source == TemplateSources.FillerStrip ? FillerStripper.Strip(answer.Prompt) : (answer.Prompt, []);
+            if (chosen is null || chosen.Render(stripped, request.Context) is not { } prompt)
                 return held;
             return held with
             {
@@ -65,7 +67,7 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
                 Changed = prompt != answer.Prompt,
                 TemplateId = chosen.Id,
                 TemplateVersion = chosen.Version,
-                Reason = $"template: {chosen.Id} v{chosen.Version} ({arm})",
+                Reason = $"template: {chosen.Id} v{chosen.Version} ({arm})" + (removed.Count > 0 ? "; removed: " + string.Join(", ", removed) : ""),
             };
         }
         catch (Exception)

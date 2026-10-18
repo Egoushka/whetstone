@@ -314,8 +314,8 @@ public static partial class Commands
                         if (!Identity(add!, out var kind, out var id, out var version, out problem))
                             return Refuse(error, problem!, TemplateUsage);
                         var template = new Template(id, version, kind, add!.GetValueOrDefault("--before", ""), add!.GetValueOrDefault("--after", ""), add!.GetValueOrDefault("--source", "hand"));
-                        if (template.Before.Length == 0 && template.After.Length == 0)
-                            return Refuse(error, "a template needs --before or --after text", TemplateUsage);
+                        if (template.Before.Length == 0 && template.After.Length == 0 && template.Source != TemplateSources.FillerStrip)
+                            return Refuse(error, "a template needs --before or --after text (only --source filler-strip may have none)", TemplateUsage);
                         if (template.UnknownSlots().ToList() is { Count: > 0 } unknown)
                             return Refuse(error, $"unknown slot {{{{{unknown[0]}}}}}; whetstone fills repository, commit and task_kind", TemplateUsage);
                         if (template.Render("x", null) is null)
