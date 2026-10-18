@@ -145,6 +145,110 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return found;
     }
 
+    public async Task<string?> AddTemplateAsync(Template version, string role, CancellationToken ct)
+    {
+        if (role is not (TemplateRoles.Champion or TemplateRoles.Challenger))
+            return "a new template starts as a champion or a challenger";
+        return await ChangeTemplatesAsync(async (connection, transaction) =>
+        {
+            if (await RoleOfAsync(connection, transaction, version.Kind, version.Id, version.Version, ct) is not null)
+                return $"{version.Id} v{version.Version} already exists for {version.Kind}; a version is immutable, give new text a new version";
+            if (await HolderAsync(connection, transaction, version.Kind, role, ct) is { } holder)
+                return $"{version.Kind} already has a {role} ({holder}); retire it first";
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO templates (template_id, version, kind, before_text, after_text, source, role, created_at)
+                VALUES ($id, $version, $kind, $before, $after, $source, $role, $at)
+                """;
+            insert.Parameters.AddWithValue("$id", version.Id);
+            insert.Parameters.AddWithValue("$version", version.Version);
+            insert.Parameters.AddWithValue("$kind", version.Kind);
+            insert.Parameters.AddWithValue("$before", version.Before);
+            insert.Parameters.AddWithValue("$after", version.After);
+            insert.Parameters.AddWithValue("$source", version.Source);
+            insert.Parameters.AddWithValue("$role", role);
+            insert.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+            await insert.ExecuteNonQueryAsync(ct);
+            return null;
+        }, ct);
+    }
+
+    public async Task<string?> PromoteTemplateAsync(string kind, string id, string version, CancellationToken ct) =>
+        await ChangeTemplatesAsync(async (connection, transaction) =>
+        {
+            var role = await RoleOfAsync(connection, transaction, kind, id, version, ct);
+            if (role is null)
+                return $"{id} v{version} is not stored for {kind}";
+            if (role != TemplateRoles.Challenger)
+                return $"{id} v{version} is a {role}; only a challenger is promoted";
+            await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'retired' WHERE kind = $kind AND role = 'champion'", kind, null, null, ct);
+            await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'champion' WHERE kind = $kind AND template_id = $id AND version = $version", kind, id, version, ct);
+            return null;
+        }, ct);
+
+    public async Task<string?> RetireTemplateAsync(string kind, string id, string version, CancellationToken ct) =>
+        await ChangeTemplatesAsync(async (connection, transaction) =>
+        {
+            var role = await RoleOfAsync(connection, transaction, kind, id, version, ct);
+            if (role is null)
+                return $"{id} v{version} is not stored for {kind}";
+            if (role == TemplateRoles.Retired)
+                return $"{id} v{version} is already retired";
+            await SetRoleAsync(connection, transaction, "UPDATE templates SET role = 'retired' WHERE kind = $kind AND template_id = $id AND version = $version", kind, id, version, ct);
+            return null;
+        }, ct);
+
+    private async Task<string?> ChangeTemplatesAsync(Func<SqliteConnection, SqliteTransaction, Task<string?>> change, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 4)
+            return "the store has no template table yet; start the server once to upgrade it";
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+        var problem = await change(connection, transaction);
+        if (problem is null)
+            await transaction.CommitAsync(ct);
+        return problem;
+    }
+
+    private static async Task<string?> RoleOfAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, string version, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT role FROM templates WHERE kind = $kind AND template_id = $id AND version = $version";
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$version", version);
+        return await command.ExecuteScalarAsync(ct) as string;
+    }
+
+    private static async Task<string?> HolderAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string role, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT template_id || ' v' || version FROM templates WHERE kind = $kind AND role = $role";
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$role", role);
+        return await command.ExecuteScalarAsync(ct) as string;
+    }
+
+    private static async Task SetRoleAsync(SqliteConnection connection, SqliteTransaction transaction, string sql, string kind, string? id, string? version, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$kind", kind);
+        if (id is not null)
+        {
+            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$version", version);
+        }
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<int> ReindexAsync(CancellationToken ct)
     {
         if (!File.Exists(path))

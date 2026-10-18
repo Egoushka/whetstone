@@ -33,6 +33,15 @@ public interface IStoreAdmin
     /// <summary>Every stored template version with its role; empty for a file from before the template store.</summary>
     Task<IReadOnlyList<Whetstone.Templates.TemplateRow>> TemplatesAsync(CancellationToken ct);
 
+    /// <summary>Stores a new template version in <paramref name="role"/> (champion or challenger). Null when done, else why not.</summary>
+    Task<string?> AddTemplateAsync(Whetstone.Templates.Template version, string role, CancellationToken ct);
+
+    /// <summary>Makes a kind's challenger its champion; the champion it replaces is retired, its record kept. Null when done, else why not.</summary>
+    Task<string?> PromoteTemplateAsync(string kind, string id, string version, CancellationToken ct);
+
+    /// <summary>Retires a champion or challenger, keeping its record; a kind left with no champion is held out entirely. Null when done, else why not.</summary>
+    Task<string?> RetireTemplateAsync(string kind, string id, string version, CancellationToken ct);
+
     /// <summary>Upgrades an older file and rebuilds the search index from the stored rows. Returns how many rows it covers.</summary>
     Task<int> ReindexAsync(CancellationToken ct);
 

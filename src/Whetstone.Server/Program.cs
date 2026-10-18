@@ -18,6 +18,8 @@ const string Usage = """
       replay [--min-chars N]                for each scored request, the earlier one that best matches it (reads only)
       report                                per kind in a template trial: runs per arm, how they went, what the
                                             promotion rule says (reads only)
+      template list|add|promote|retire      the owner's act on templates: add a challenger, promote it over the champion, retire
+                                            a version (options: whetstone template without arguments)
       reindex                               upgrade an older store file and rebuild its search index
       forget (--all | [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
@@ -82,6 +84,8 @@ switch (args)
         return await Commands.ReplayAsync(replayOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["report", .. var reportOptions]:
         return await Commands.ReportAsync(reportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["template", .. var templateOptions]:
+        return await Commands.TemplateAsync(templateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["reindex", .. var reindexOptions]:
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:
