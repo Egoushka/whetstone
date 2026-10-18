@@ -53,6 +53,12 @@ public interface IStoreAdmin
     /// </summary>
     Task<string?> FindAsync(string importedId, string client, string prompt, DateTimeOffset at, TimeSpan within, CancellationToken ct);
 
+    /// <summary>Every replay case (ADR 0006); empty for a file before schema 6.</summary>
+    Task<IReadOnlyList<Whetstone.Gym.GymCase>> GymCasesAsync(CancellationToken ct);
+
+    /// <summary>Stores new replay cases; a case already stored is left as it is. Null when done, else why not.</summary>
+    Task<string?> AddGymCasesAsync(IReadOnlyList<Whetstone.Gym.GymCase> cases, CancellationToken ct);
+
     /// <summary>Sets (or, with null, clears) the owner's hand label on one request. Null when done, else why not.</summary>
     Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct);
 

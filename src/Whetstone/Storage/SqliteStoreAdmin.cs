@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.Data.Sqlite;
 using Whetstone.Contracts;
+using Whetstone.Gym;
 using Whetstone.Templates;
 
 namespace Whetstone.Storage;
@@ -108,6 +109,55 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await vacuum.ExecuteNonQueryAsync(ct);
         }
         return deleted;
+    }
+
+    public async Task<IReadOnlyList<GymCase>> GymCasesAsync(CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return [];
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return [];
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT case_id, source_request_id, repository, commit_sha, task_kind, prompt_hash, pinned, selected_at FROM gym_cases ORDER BY selected_at, case_id";
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var found = new List<GymCase>();
+        while (await reader.ReadAsync(ct))
+            found.Add(new GymCase(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                reader.GetInt64(6) != 0, DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)));
+        return found;
+    }
+
+    public async Task<string?> AddGymCasesAsync(IReadOnlyList<GymCase> cases, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return "the store has no gym tables yet; start the server once to upgrade it";
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+        foreach (var c in cases)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT OR IGNORE INTO gym_cases (case_id, source_request_id, repository, commit_sha, task_kind, prompt_hash, pinned, selected_at)
+                VALUES ($id, $source, $repository, $commit, $kind, $hash, $pinned, $at)
+                """;
+            insert.Parameters.AddWithValue("$id", c.CaseId);
+            insert.Parameters.AddWithValue("$source", c.SourceRequestId);
+            insert.Parameters.AddWithValue("$repository", c.Repository);
+            insert.Parameters.AddWithValue("$commit", c.Commit);
+            insert.Parameters.AddWithValue("$kind", c.TaskKind);
+            insert.Parameters.AddWithValue("$hash", c.PromptHash);
+            insert.Parameters.AddWithValue("$pinned", c.Pinned ? 1 : 0);
+            insert.Parameters.AddWithValue("$at", c.SelectedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return null;
     }
 
     public async Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct)

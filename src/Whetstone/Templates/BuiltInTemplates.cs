@@ -23,7 +23,8 @@ public static class BuiltInTemplates
         + "When the task is done and the checks pass, stop and report. Keep the report under 300 words.\n"
         + "Stay within the task above; if something else needs doing, say so in the report instead of doing it.";
 
-    private static readonly string[] ReadOnlyKinds =
+    /// <summary>Kinds whose subagent only reads; the replay gym replays only these (ADR 0006).</summary>
+    public static readonly IReadOnlyList<string> ReadOnlyKinds =
     [
         "agent/explore", "agent/plan", "agent/claude-code-guide", "agent/box-reader", "agent/general-purpose/explore", "agent/general-purpose/research",
     ];
