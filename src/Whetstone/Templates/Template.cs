@@ -9,6 +9,12 @@ public static class TemplateSources
 {
     /// <summary>Written by hand and shipped with whetstone.</summary>
     public const string BuiltIn = "built-in";
+
+    /// <summary>
+    /// A model rewrites the prompt in the client; the stored template has no text of its own and serves the prompt as it is, so the
+    /// client knows to run the rewrite (ADR 0005). The version names the rewriter's rules.
+    /// </summary>
+    public const string Model = "model";
 }
 
 /// <summary>What a template is doing for its kind.</summary>
