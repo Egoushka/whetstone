@@ -30,11 +30,14 @@ internal static class ReportText
                         .Append(stats.MedianCost is { } cost ? $", median cost {cost:0} (of {stats.Costed} runs)" : "")
                         .Append(stats.MedianDurationMs is { } ms ? $", median duration {ms / 1000:0.#} s" : "")
                         .Append(stats.ReworkReported > 0 ? $", rework {Percent(stats.Rework, stats.ReworkReported)}" : "")
-                        .Append(stats.MedianPersonMs is { } person ? $", median person time {person / 1000:0.#} s (of {stats.PersonTimed} runs)" : "").Append('\n');
+                        .Append(stats.MedianPersonMs is { } person ? $", median person time {person / 1000:0.#} s (of {stats.PersonTimed} runs)" : "")
+                        .Append(stats.CacheReadShare is { } share ? $", cache reads {100 * share:0}% of prompt tokens" : "").Append('\n');
             }
             AppendVersions(text, kind);
             if (kind.SampleRatio is { } ratio)
                 text.Append("  sample ratio: ").Append(ratio).Append('\n');
+            if (kind.Cache is { } cache)
+                text.Append("  cache: ").Append(cache).Append('\n');
             if (kind.Monitor is { } monitor)
                 text.Append("  monitor: ").Append(monitor).Append('\n');
             foreach (var look in kind.Looks)
