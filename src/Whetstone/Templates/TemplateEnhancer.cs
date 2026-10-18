@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Whetstone.Contracts;
 using Whetstone.Kinds;
 
@@ -10,6 +11,11 @@ namespace Whetstone.Templates;
 /// </summary>
 public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IEnhancer
 {
+    /// <summary>How long a kind's allocation stands before the tallies are read again.</summary>
+    private static readonly TimeSpan ShareLife = TimeSpan.FromMinutes(1);
+
+    private readonly ConcurrentDictionary<string, (DateTimeOffset Until, double[] Shares)> _shares = new(StringComparer.Ordinal);
+
     private long _failures;
 
     /// <summary>The enhancer this one adds to, so a health report can still reach it.</summary>
@@ -26,6 +32,18 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
         return kind is null or PromptKinds.Other ? null : kind;
     }
 
+    /// <summary>The champion's share first, then each challenger's, from how each has done; read at most once a minute per kind.</summary>
+    private async Task<double[]> SharesAsync(string kind, KindTemplates found, CancellationToken ct)
+    {
+        var now = TimeProvider.System.GetUtcNow();
+        if (_shares.TryGetValue(kind, out var cached) && cached.Until > now && cached.Shares.Length == found.Challengers.Count + 1)
+            return cached.Shares;
+        var tallies = await templates.TalliesAsync(kind, ct);
+        var shares = Allocation.Shares([.. new[] { found.Champion! }.Concat(found.Challengers).Select(t => tallies.GetValueOrDefault(Allocation.Key(t)))]);
+        _shares[kind] = (now + ShareLife, shares);
+        return shares;
+    }
+
     public async Task<EnhanceResponse> EnhanceAsync(EnhanceRequest request, CancellationToken ct)
     {
         var answer = await inner.EnhanceAsync(request, ct);
@@ -34,8 +52,10 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
         try
         {
             var found = await templates.ForKindAsync(kind, ct);
-            var arm = found.Champion is null ? Arms.HeldOut : Arms.Assign(kind, answer.RequestId, found.Challenger is not null);
-            var chosen = arm switch { Arms.Champion => found.Champion, Arms.Challenger => found.Challenger, _ => null };
+            var (arm, index) = found.Champion is null ? (Arms.HeldOut, -1)
+                : found.Challengers.Count >= 2 ? Arms.Assign(kind, answer.RequestId, await SharesAsync(kind, found, ct))
+                : (Arms.Assign(kind, answer.RequestId, found.Challenger is not null), 0);
+            var chosen = arm switch { Arms.Champion => found.Champion, Arms.Challenger => found.Challengers[index], _ => null };
             var held = answer with { HeldOut = arm == Arms.HeldOut, TaskKind = kind, Arm = arm };
             if (chosen is null || chosen.Render(answer.Prompt, request.Context) is not { } prompt)
                 return held;

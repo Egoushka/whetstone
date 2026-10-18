@@ -31,6 +31,19 @@ public static class Arms
         return challengerOnTrial && bucket >= 100 - HeldOutPercent - ChallengerPercent ? Challenger : Champion;
     }
 
+    /// <summary>
+    /// The arm for a kind with several challengers. The held-out bucket is the same as in <see cref="Assign"/>, fixed before any
+    /// allocation, so the held-out arm stays an unbiased baseline. The rest is split by <paramref name="shares"/> (the champion first,
+    /// then each challenger, summing to 1; see <see cref="Allocation"/>). <c>Challenger</c> is the index among the challengers.
+    /// </summary>
+    public static (string Arm, int Challenger) Assign(string kind, string requestId, IReadOnlyList<double> shares)
+    {
+        if (Bucket(kind, requestId) >= 100 - HeldOutPercent)
+            return (HeldOut, -1);
+        var pick = Allocation.Pick(kind, requestId, shares);
+        return pick == 0 ? (Champion, -1) : (Challenger, pick - 1);
+    }
+
     /// <summary>0 to 99, stable across runs and machines.</summary>
     public static int Bucket(string kind, string requestId)
     {

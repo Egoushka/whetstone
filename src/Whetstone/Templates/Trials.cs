@@ -111,7 +111,10 @@ public sealed record LookResult(int Runs, int ChampionRuns, double Z, string Ver
 public sealed record KindReport(
     string Kind, KindTemplates Templates, IReadOnlyDictionary<string, int> Runs, string? Model, IReadOnlyDictionary<string, ArmStats> Counted,
     IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor, IReadOnlyList<VersionStats>? Versions = null, string CostMeasure = "run cost",
-    string? Cache = null);
+    string? Cache = null, IReadOnlyList<RivalReport>? Rivals = null);
+
+/// <summary>One challenger of a kind that has several, judged alone against the champion at the same fixed looks.</summary>
+public sealed record RivalReport(string TemplateId, string Version, int Counted, IReadOnlyList<LookResult> Looks);
 
 /// <summary>An arm's counted runs: those with a completion, in the model's evidence window.</summary>
 public sealed record ArmStats(
@@ -151,16 +154,30 @@ public static class Trials
         var byArm = counted.GroupBy(r => r.Arm ?? "none").ToDictionary(g => g.Key, g => g.OrderBy(r => r.At).ToList());
         List<TrialRun> Of(string arm) => byArm.TryGetValue(arm, out var list) ? list : [];
         var stats = byArm.ToDictionary(g => g.Key, g => Stats(g.Value));
-        var looks = new List<LookResult>();
         var challenger = Of(Arms.Challenger);
         var champion = Of(Arms.Champion);
+        var several = templates.Challengers.Count >= 2;
+        var rivals = several
+            ? templates.Challengers.Select(t =>
+            {
+                var own = challenger.Where(r => r.TemplateId == t.Id && r.TemplateVersion == t.Version).ToList();
+                return new RivalReport(t.Id, t.Version, own.Count, Looks(own, champion, measure));
+            }).ToList()
+            : null;
+        return new KindReport(kind, templates, runs, model, stats, several ? [] : Looks(challenger, champion, measure),
+            SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0, several), Monitor(champion, Of(Arms.HeldOut), measure),
+            PerVersion(all), measure.Name, Cache(stats), rivals);
+    }
+
+    private static List<LookResult> Looks(List<TrialRun> challenger, List<TrialRun> champion, CostMeasure measure)
+    {
+        var looks = new List<LookResult>();
         foreach (var look in LookRuns.Where(l => l <= challenger.Count))
         {
             var cutoff = challenger[look - 1].At;
             looks.Add(Decide(look, [.. challenger.Take(look)], [.. champion.Where(r => r.At <= cutoff)], measure));
         }
-        return new KindReport(kind, templates, runs, model, stats, looks, SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0),
-            Monitor(champion, Of(Arms.HeldOut), measure), PerVersion(all), measure.Name, Cache(stats));
+        return looks;
     }
 
     /// <summary>
@@ -320,12 +337,23 @@ public static class Trials
     }
 
     /// <summary>Chi-square of the arm counts against the planned split; a failure means the assignment cannot be trusted.</summary>
-    private static string? SampleRatio(IReadOnlyDictionary<string, int> runs, bool challenger)
+    private static string? SampleRatio(IReadOnlyDictionary<string, int> runs, bool challenger, bool allocated)
     {
         var (c, t, h) = (runs.GetValueOrDefault(Arms.Champion), runs.GetValueOrDefault(Arms.Challenger), runs.GetValueOrDefault(Arms.HeldOut));
         var total = c + t + h;
         if (total < MinCompared)
             return null;
+        if (allocated)
+        {
+            // The bandit moves the rest around, so only the share fixed by the hash can be checked against a plan (evidence volume, decision 1).
+            var expectedHeld = total * Arms.HeldOutPercent / 100.0;
+            var expectedRest = total - expectedHeld;
+            var chiHeld = ((h - expectedHeld) * (h - expectedHeld) / expectedHeld) + ((c + t - expectedRest) * (c + t - expectedRest) / expectedRest);
+            var heldText = chiHeld.ToString("0.0", CultureInfo.InvariantCulture);
+            return chiHeld > ChiSquareCriticalOne
+                ? $"FAILED (chi-square {heldText}, held-out share only): the held-out count does not match the planned 10%; take no decision until the cause is found"
+                : $"ok (chi-square {heldText}, held-out share only)";
+        }
         var expected = challenger ? new[] { 0.6, 0.3, 0.1 } : new[] { 0.9, 0.0, 0.1 };
         var observed = new double[] { c, t, h };
         double chi = 0;

@@ -153,8 +153,15 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         {
             if (await RoleOfAsync(connection, transaction, version.Kind, version.Id, version.Version, ct) is not null)
                 return $"{version.Id} v{version.Version} already exists for {version.Kind}; a version is immutable, give new text a new version";
-            if (await HolderAsync(connection, transaction, version.Kind, role, ct) is { } holder)
+            if (role == TemplateRoles.Challenger)
+            {
+                if (await CountAsync(connection, transaction, version.Kind, role, ct) >= KindTemplates.MaxChallengers)
+                    return $"{version.Kind} already has {KindTemplates.MaxChallengers} challengers; retire one first";
+            }
+            else if (await HolderAsync(connection, transaction, version.Kind, role, ct) is { } holder)
+            {
                 return $"{version.Kind} already has a {role} ({holder}); retire it first";
+            }
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
@@ -223,6 +230,16 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$version", version);
         return await command.ExecuteScalarAsync(ct) as string;
+    }
+
+    private static async Task<long> CountAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string role, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT COUNT(*) FROM templates WHERE kind = $kind AND role = $role";
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$role", role);
+        return Convert.ToInt64(await command.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
     private static async Task<string?> HolderAsync(SqliteConnection connection, SqliteTransaction transaction, string kind, string role, CancellationToken ct)

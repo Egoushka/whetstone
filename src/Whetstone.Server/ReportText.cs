@@ -42,6 +42,9 @@ internal static class ReportText
                 text.Append("  monitor: ").Append(monitor).Append('\n');
             foreach (var look in kind.Looks)
                 text.Append(CultureInfo.InvariantCulture, $"  look at {look.Runs} challenger runs (champion {look.ChampionRuns}): z {look.Z:0.0}, {look.Verdict} ({look.Why})\n");
+            foreach (var rival in kind.Rivals ?? [])
+                foreach (var look in rival.Looks)
+                    text.Append(CultureInfo.InvariantCulture, $"  look at {look.Runs} runs of {rival.TemplateId} v{rival.Version} (champion {look.ChampionRuns}): z {look.Z:0.0}, {look.Verdict} ({look.Why})\n");
         }
         text.Append("\nThe report decides nothing: a verdict is applied by the owner.\n");
         return text.ToString();
@@ -66,7 +69,17 @@ internal static class ReportText
                 .Append(v.MedianCost is { } cost ? $", median cost {cost:0}" : "")
                 .Append(v.MedianPersonMs is { } person ? $", median person time {person / 1000:0.#} s" : "").Append('\n');
         }
-        if (kind.Templates.Challenger is { } challenger)
+        if (kind.Rivals is { } rivals)
+        {
+            foreach (var rival in rivals)
+            {
+                var next = Trials.LookRuns.FirstOrDefault(l => l > rival.Counted);
+                text.Append("  trial: ").Append(rival.TemplateId).Append(" v").Append(rival.Version).Append(CultureInfo.InvariantCulture, $" has {rival.Counted} counted runs; ")
+                    .Append(next == 0 ? "past the last look" : $"first decision at {next}").Append('\n');
+            }
+            text.Append("  traffic: the non-held-out share is split by Thompson sampling with a 15% floor per arm; held out stays 10%\n");
+        }
+        else if (kind.Templates.Challenger is { } challenger)
         {
             var counted = kind.Counted.TryGetValue(Arms.Challenger, out var arm) ? arm.Runs : 0;
             var next = Trials.LookRuns.FirstOrDefault(l => l > counted);
@@ -83,7 +96,7 @@ internal static class ReportText
 
     private static string Who(KindTemplates templates) =>
         (templates.Champion is { } champion ? $"champion {champion.Id} v{champion.Version}" : "no champion (held out entirely)")
-        + (templates.Challenger is { } challenger ? $"; challenger {challenger.Id} v{challenger.Version}" : "; no challenger");
+        + (templates.Challengers.Count > 0 ? "; " + string.Join(", ", templates.Challengers.Select(c => $"challenger {c.Id} v{c.Version}")) : "; no challenger");
 
     private static string Percent(int part, int whole) => whole == 0 ? "-" : $"{100.0 * part / whole:0}% ({part}/{whole})";
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using Whetstone.Contracts;
 using Whetstone.Retrieval;
 using Whetstone.Templates;
 
@@ -197,19 +198,41 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
     public async Task<KindTemplates> ForKindAsync(string kind, CancellationToken ct) => await UseAsync(async connection =>
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT template_id, version, kind, before_text, after_text, source, role FROM templates WHERE kind = $kind AND role IN ('champion', 'challenger')";
+        command.CommandText = "SELECT template_id, version, kind, before_text, after_text, source, role, created_at FROM templates WHERE kind = $kind AND role IN ('champion', 'challenger')";
         command.Parameters.AddWithValue("$kind", kind);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        Template? champion = null, challenger = null;
+        Template? champion = null;
+        var challengers = new List<(Template Template, string Order)>();
         while (await reader.ReadAsync(ct))
         {
             var template = new Template(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5));
             if (reader.GetString(6) == TemplateRoles.Champion)
                 champion = template;
             else
-                challenger = template;
+                challengers.Add((template, reader.GetString(7)));
         }
-        return new KindTemplates(champion, challenger);
+        return new KindTemplates(champion, [.. challengers.OrderBy(c => c.Order, StringComparer.Ordinal).ThenBy(c => c.Template.Id, StringComparer.Ordinal).Select(c => c.Template)]);
+    }, ct);
+
+    public async Task<IReadOnlyDictionary<string, Tally>> TalliesAsync(string kind, CancellationToken ct) => await UseAsync<IReadOnlyDictionary<string, Tally>>(async connection =>
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT template_id, template_version, completed, asked_again, correction_reason FROM requests
+            WHERE task_kind = $kind AND arm IN ('champion', 'challenger') AND template_id IS NOT NULL AND completed IS NOT NULL
+            """;
+        command.Parameters.AddWithValue("$kind", kind);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var tallies = new Dictionary<string, Tally>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(ct))
+        {
+            var reason = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var rework = reason is not null ? CorrectionReasons.IsRework(reason) : !reader.IsDBNull(3) && reader.GetInt64(3) != 0;
+            var key = Allocation.Key(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1));
+            var tally = tallies.GetValueOrDefault(key);
+            tallies[key] = reader.GetInt64(2) != 0 && !rework ? tally with { Wins = tally.Wins + 1 } : tally with { Losses = tally.Losses + 1 };
+        }
+        return tallies;
     }, ct);
 
     public async Task SeedAsync(IReadOnlyList<Template> templates, string role, CancellationToken ct) => await UseAsync(async connection =>
@@ -219,10 +242,12 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            // OR IGNORE: a version already stored keeps its text and role, and a kind that has a champion keeps it.
+            // OR IGNORE: a version already stored keeps its text and role, and a kind that has a champion keeps it. A seeded challenger
+            // is added only to a kind with none, so a release's built-in one does not join a challenger the owner is already trying.
             command.CommandText = """
                 INSERT OR IGNORE INTO templates (template_id, version, kind, before_text, after_text, source, role, created_at)
-                VALUES ($id, $version, $kind, $before, $after, $source, $role, $at)
+                SELECT $id, $version, $kind, $before, $after, $source, $role, $at
+                WHERE $role <> 'challenger' OR NOT EXISTS (SELECT 1 FROM templates WHERE kind = $kind AND role = 'challenger')
                 """;
             command.Parameters.AddWithValue("$id", template.Id);
             command.Parameters.AddWithValue("$version", template.Version);

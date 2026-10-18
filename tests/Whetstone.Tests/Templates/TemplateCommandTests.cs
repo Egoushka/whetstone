@@ -51,17 +51,17 @@ public sealed class TemplateCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task A_second_challenger_a_reused_version_and_a_promoted_champion_are_refused()
+    public async Task A_second_champion_a_reused_version_and_a_promoted_champion_are_refused()
     {
         await Champion();
         await Run("add", "--kind", "typed/implement", "--id", "next", "--version", "1", "--after", "A.");
 
-        var second = await Run("add", "--kind", "typed/implement", "--id", "other", "--version", "1", "--after", "B.");
+        var second = await Run("add", "--kind", "typed/implement", "--id", "other", "--version", "1", "--after", "B.", "--champion");
         var reuse = await Run("add", "--kind", "typed/implement", "--id", "next", "--version", "1", "--after", "Changed text.");
         var champion = await Run("promote", "--kind", "typed/implement", "--id", "base", "--version", "1");
 
         Assert.Equal(Commands.Failed, second.Code);
-        Assert.Contains("already has a challenger", second.Err, StringComparison.Ordinal);
+        Assert.Contains("already has a champion", second.Err, StringComparison.Ordinal);
         Assert.Equal(Commands.Failed, reuse.Code);
         Assert.Contains("immutable", reuse.Err, StringComparison.Ordinal);
         Assert.Equal(Commands.Failed, champion.Code);
