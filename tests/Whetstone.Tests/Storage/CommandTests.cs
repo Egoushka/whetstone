@@ -124,6 +124,26 @@ public sealed class CommandTests : IDisposable
         Assert.Equal(("incomplete", 2L, 0L, 95000L), (record.Outcome.CorrectionReason, record.Outcome.ReviewFindings, record.Outcome.ReviewFindingsSevere, record.Outcome.PersonMs));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_rewrite_pair_is_exported_redacted_whether_the_person_sent_it_or_reverted_it(bool accepted)
+    {
+        var answer = new EnhanceResponse("add a retry", false, null, null, "", null, "req-1", false);
+        await _stores.ForUser("owner").RecordAsync(RequestRow.From(new EnhanceRequest("add a retry", new EnhanceContext("example/app", null, "typed/implement", "test")), answer, Day1), CancellationToken.None);
+        var token = "sk-ant-api03-" + new string('A', 95);
+        var report = new FeedbackOutcome(RewriteAccepted: accepted, RewrittenPrompt: "Add a retry with backoff, using " + token + " for the call.");
+        await _stores.ForUser("owner").RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", report), Day2), CancellationToken.None);
+
+        var line = Assert.Single(Lines((await Export()).Out));
+
+        Assert.Empty(ContractSchemas.ValidateExport(JsonDocument.Parse(line).RootElement));
+        var record = JsonSerializer.Deserialize<ExportRecord>(line, ContractJson.Options)!;
+        Assert.Equal(("add a retry", accepted), (record.Prompt, record.Outcome!.RewriteAccepted));
+        Assert.StartsWith("Add a retry with backoff, using ", record.Outcome.RewrittenPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, line, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Export_filters_by_repository_and_by_date()
     {

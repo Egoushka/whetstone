@@ -69,6 +69,7 @@
             "review_findings": { "type": "integer", "minimum": 0 },
             "review_findings_severe": { "type": "integer", "minimum": 0 },
             "person_ms": { "type": "integer", "minimum": 0 },
+            "rewritten_prompt": { "type": "string", "description": "What the client's model wrote in place of the prompt, redacted; with the request's prompt it is a rewrite pair, and rewrite_accepted says whether the person sent it." },
             "reported_at": { "type": "string", "format": "date-time" }
           }
         }

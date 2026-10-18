@@ -46,7 +46,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
                    rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
-                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}
+                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -64,7 +64,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                         Flag(reader, 19), Count(reader, 20), Count(reader, 21), Count(reader, 22), Count(reader, 23), Count(reader, 24), Count(reader, 25),
                         Flag(reader, 26), Text(reader, 27),
                         Count(reader, 30), Flag(reader, 31), Flag(reader, 32), Flag(reader, 33), Flag(reader, 34), Text(reader, 35), Count(reader, 36),
-                        Count(reader, 37), Count(reader, 38)),
+                        Count(reader, 37), Count(reader, 38), Text(reader, 40)),
                 Flag(reader, 39));
         }
     }

@@ -21,7 +21,8 @@ public static class CorrectionReasons
 /// writes are apart from input.
 /// The reward measures (<c>Commits</c> on, docs/specs/2026-10-19-reward-signals-design.md) often arrive later, in another report for
 /// the same request: delayed outcomes, the reason the next prompt corrected the run, review findings on the produced change and the
-/// person's time.
+/// person's time. <c>RewrittenPrompt</c> is what a client's model wrote in place of the prompt, kept beside the original whether the
+/// person sent it or reverted it (<c>RewriteAccepted</c> says which): a rewrite pair (evidence volume, decision 6).
 /// </remarks>
 public sealed record FeedbackOutcome(
     bool? RewriteAccepted = null,
@@ -46,4 +47,5 @@ public sealed record FeedbackOutcome(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CorrectionReason = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ReviewFindings = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ReviewFindingsSevere = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? PersonMs = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? PersonMs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RewrittenPrompt = null);

@@ -89,6 +89,13 @@ public sealed record RequestRow
         };
     }
 
+    /// <summary>Redacts the whole text first and cuts after, as for a prompt.</summary>
+    internal static string CutRedacted(string text)
+    {
+        var redacted = Redactor.Redact(text).Text;
+        return redacted.Length > MaxPromptChars ? Cut(redacted) : redacted;
+    }
+
     private static string Cut(string prompt)
     {
         var keep = MaxPromptChars - CutMarker.Length;
@@ -158,6 +165,9 @@ public sealed record OutcomeRow
 
     public long? PersonMs { get; init; }
 
+    /// <summary>The client's model rewrite, redacted and cut like the prompt it pairs with.</summary>
+    public string? RewrittenPrompt { get; init; }
+
     public static OutcomeRow From(FeedbackRequest request, DateTimeOffset at) => new()
     {
         RequestId = request.RequestId,
@@ -185,5 +195,6 @@ public sealed record OutcomeRow
         ReviewFindings = request.Outcome.ReviewFindings,
         ReviewFindingsSevere = request.Outcome.ReviewFindingsSevere,
         PersonMs = request.Outcome.PersonMs,
+        RewrittenPrompt = request.Outcome.RewrittenPrompt is { } rewrite ? RequestRow.CutRedacted(rewrite) : null,
     };
 }
