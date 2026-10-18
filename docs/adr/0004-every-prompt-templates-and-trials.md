@@ -1,6 +1,6 @@
 # 0004. Every prompt, versioned templates and trials; retrieval becomes a source, not the product
 
-- Status: proposed
+- Status: proposed (typed-prompt limit amended by [0005](0005-mods-rewrite-typed-prompts.md))
 - Date: 2026-10-10
 
 ## Context
