@@ -78,6 +78,43 @@ public sealed class StoreTests : IDisposable
         Assert.Equal((2L, 0L), ((long)row["review_findings"]!, (long)row["review_findings_severe"]!));
     }
 
+    private async Task Typed(string id, string prompt, int minute, string? session = "s-1") =>
+        await Store().RecordAsync(Row(prompt, new EnhanceContext("example/app", null, "typed/implement", "claude-code", session), id) with { CreatedAt = At.AddMinutes(minute) }, CancellationToken.None);
+
+    [Fact]
+    public async Task A_correction_marks_the_previous_request_of_its_session_with_a_reason()
+    {
+        await Typed("req-1", "make the parser accept tabs", 1);
+        await Typed("other-session", "rename the loader", 2, session: "s-2");
+        await Typed("req-2", "you forgot the spaces case", 3);
+
+        var rows = Db.Requests(_data.FileFor("owner")).ToDictionary(r => (string)r["request_id"]!);
+        Assert.Equal(("incomplete", 1L), ((string)rows["req-1"]["correction_reason"]!, (long)rows["req-1"]["asked_again"]!));
+        Assert.NotNull(rows["req-1"]["feedback_at"]);
+        Assert.Null(rows["other-session"]["correction_reason"]);
+        Assert.Null(rows["req-2"]["correction_reason"]);
+    }
+
+    [Fact]
+    public async Task A_prompt_that_moves_on_or_has_no_session_marks_nothing()
+    {
+        await Typed("req-1", "make the parser accept tabs", 1);
+        await Typed("req-2", "thanks, now add a changelog entry", 2);
+        await Typed("req-3", "no, that's wrong", 3, session: null);
+
+        Assert.All(Db.Requests(_data.FileFor("owner")), r => Assert.Null(r["correction_reason"]));
+    }
+
+    [Fact]
+    public async Task A_reason_the_client_reported_wins_over_the_rules()
+    {
+        await Typed("req-1", "make the parser accept tabs", 1);
+        await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", new FeedbackOutcome(AskedAgain: true, CorrectionReason: "misread")), At.AddMinutes(2)), CancellationToken.None);
+        await Typed("req-2", "you forgot the spaces case", 3);
+
+        Assert.Equal("misread", Db.Requests(_data.FileFor("owner"))[0]["correction_reason"]);
+    }
+
     [Fact]
     public async Task A_reward_measure_nobody_reported_stays_null()
     {

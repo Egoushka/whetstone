@@ -100,7 +100,23 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$source", (object?)row.SourceRequestId ?? DBNull.Value);
         command.Parameters.AddWithValue("$arm", (object?)row.Arm ?? DBNull.Value);
         command.Parameters.AddWithValue("$session", (object?)row.SessionId ?? DBNull.Value);
-        return await command.ExecuteNonQueryAsync(ct);
+        var stored = await command.ExecuteNonQueryAsync(ct);
+        if (row.Corrects is null)
+            return stored;
+        // A reason or asked_again the client already reported for the previous request wins over the rules.
+        await using var correct = connection.CreateCommand();
+        correct.CommandText = """
+            UPDATE requests SET correction_reason = COALESCE(correction_reason, $reason), asked_again = COALESCE(asked_again, 1),
+              feedback_at = COALESCE(feedback_at, $at)
+            WHERE request_id = (
+              SELECT request_id FROM requests WHERE session_id = $session AND created_at < $at AND request_id <> $id
+              ORDER BY created_at DESC, request_id DESC LIMIT 1)
+            """;
+        correct.Parameters.AddWithValue("$reason", row.Corrects);
+        correct.Parameters.AddWithValue("$session", row.SessionId!);
+        correct.Parameters.AddWithValue("$at", Text(row.CreatedAt));
+        correct.Parameters.AddWithValue("$id", row.RequestId);
+        return stored + await correct.ExecuteNonQueryAsync(ct);
     }, ct);
 
     public async Task<bool> RecordOutcomeAsync(OutcomeRow outcome, CancellationToken ct) => await UseAsync(async connection =>

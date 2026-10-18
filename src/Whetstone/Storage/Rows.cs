@@ -1,4 +1,5 @@
 using Whetstone.Contracts;
+using Whetstone.Kinds;
 using Whetstone.Redaction;
 
 namespace Whetstone.Storage;
@@ -53,6 +54,12 @@ public sealed record RequestRow
     /// <summary>Which arm the answer was (champion, challenger, held_out); null when no template trial applied.</summary>
     public string? Arm { get; init; }
 
+    /// <summary>
+    /// Why this prompt corrects the session's previous request (<see cref="Corrections"/>); null when it does not, or when the client
+    /// sent no session id. Kept on the previous row, not this one.
+    /// </summary>
+    public string? Corrects { get; init; }
+
     public static RequestRow From(EnhanceRequest request, EnhanceResponse response, DateTimeOffset at)
     {
         // Redact the whole prompt first and cut after: a cut first could leave half a secret that no pattern matches.
@@ -78,6 +85,7 @@ public sealed record RequestRow
             Truncated = truncated,
             SourceRequestId = response.SourceRequestId,
             Arm = response.Arm,
+            Corrects = context?.SessionId is null ? null : Corrections.Reason(request.Prompt),
         };
     }
 
