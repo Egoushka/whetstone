@@ -40,7 +40,9 @@ test('a champion template is sent as the prompt, shown, and the turn is reported
   expect(logged.join('\n')).toContain('Start with * to send as typed')
   const enhance = calls.find(c => c.name === 'enhance')!
   expect(enhance.arguments.prompt).toBe(PROMPT)
-  expect(enhance.arguments.context).toEqual({ client: 'claude-code', repository: 'Example/app' })
+  const { session_id, ...context } = enhance.arguments.context
+  expect(context).toEqual({ client: 'claude-code', repository: 'Example/app' })
+  expect(session_id).toMatch(/^cc-[a-z0-9]+-[a-z0-9]+$/)
   await $.turn.start({ text: seen, turnId: 't1' })
   await $.turn.complete({ answer: 'done', durationMs: 4200, isAborted: false, turnId: 't1', usage: { ...usage, input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, model: 'm' } })
   const fb = calls.find(c => c.name === 'feedback')!
