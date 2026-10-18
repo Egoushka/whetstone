@@ -247,6 +247,24 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return null;
     }
 
+    public async Task<string?> PinGymCasesAsync(IReadOnlyList<string> caseIds, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return "the store has no gym tables yet; start the server once to upgrade it";
+        foreach (var id in caseIds)
+        {
+            await using var pin = connection.CreateCommand();
+            pin.CommandText = "UPDATE gym_cases SET pinned = 1 WHERE case_id = $id";
+            pin.Parameters.AddWithValue("$id", id);
+            await pin.ExecuteNonQueryAsync(ct);
+        }
+        return null;
+    }
+
     private static DateTimeOffset Instant(string text) => DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
     public async Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct)

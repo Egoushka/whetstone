@@ -52,6 +52,8 @@ public static partial class Commands
         usage: whetstone gym select --kind K [--limit N] [--confirm]
                whetstone gym run --challenger ID@VERSION [--cases N] [--budget-usd B]
                whetstone gym report --challenger ID@VERSION
+               whetstone gym pin|test --template ID@VERSION
+               whetstone gym canary | whetstone gym harnesses
         """;
 
     /// <summary>
@@ -65,8 +67,10 @@ public static partial class Commands
         clock ??= () => DateTimeOffset.UtcNow;
         if (options.Count > 0 && options[0] is "run" or "report")
             return await GymTrialAsync(options, admin, output, error, runner, judge, clock, ct);
+        if (options.Count > 0 && options[0] is "pin" or "test" or "canary" or "harnesses")
+            return await GymUnitAsync(options, admin, output, error, runner, clock, ct);
         if (options.Count == 0 || options[0] != "select")
-            return Refuse(error, "a gym command is select, run or report", GymUsage);
+            return Refuse(error, "a gym command is select, run, report, pin, test, canary or harnesses", GymUsage);
         if (!Parse([.. options.Skip(1)], ["--kind", "--limit"], ["--confirm"], out var parsed, out var problem))
             return Refuse(error, problem!, GymUsage);
         if (!parsed!.TryGetValue("--kind", out var kind))
@@ -97,6 +101,98 @@ public static partial class Commands
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "gym", e);
+        }
+    }
+
+    /// <summary>
+    /// Unit cases, the drift canary and the harness comparison (spec decisions 3 to 5): <c>pin</c> marks five cases for a template,
+    /// <c>test</c> replays the template on them and compares with its earlier runs there, <c>canary</c> lists champions whose kind now
+    /// runs on a model their unit cases never saw, <c>harnesses</c> compares gym clients on control runs. None of it feeds a live trial.
+    /// </summary>
+    private static async Task<int> GymUnitAsync(
+        IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, IReplayRunner? runner, Func<DateTimeOffset> clock, CancellationToken ct)
+    {
+        var command = options[0];
+        var templated = command is "pin" or "test";
+        if (!Parse([.. options.Skip(1)], templated ? ["--template"] : [], [], out var parsed, out var problem))
+            return Refuse(error, problem!, GymUsage);
+        string? id = null, version = null;
+        if (templated)
+        {
+            if (!parsed!.TryGetValue("--template", out var named) || named.Split('@') is not [{ Length: > 0 } i, { Length: > 0 } v])
+                return Refuse(error, "--template ID@VERSION is needed", GymUsage);
+            (id, version) = (i, v);
+        }
+        try
+        {
+            var (runs, _) = await admin.GymResultsAsync(ct);
+            var cases = await admin.GymCasesAsync(ct);
+            var templates = await admin.TemplatesAsync(ct);
+            switch (command)
+            {
+                case "harnesses":
+                    var lines = UnitCases.Harnesses(runs, cases);
+                    if (lines.Count == 0)
+                        await output.WriteAsync("No control runs yet.\n");
+                    foreach (var l in lines)
+                        await output.WriteAsync(FormattableString.Invariant(
+                            $"{l.Kind}  {l.Client}: {l.Runs} runs, completed {Percent(l.Completed, l.Runs)}{(l.MedianCost is { } c ? FormattableString.Invariant($", median cost ${c:0.000}") : "")}{(l.MedianDurationMs is { } ms ? FormattableString.Invariant($", median {ms / 1000:0.#} s") : "")}\n"));
+                    await output.WriteAsync("The comparison chooses nothing: the client is the owner's choice.\n");
+                    return Ok;
+                case "canary":
+                    var live = new Dictionary<string, (string At, string? Model)>(StringComparer.Ordinal);
+                    await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                        if (record is { Context.TaskKind: { } k, Outcome.Model: { } m } && (!live.TryGetValue(k, out var seen) || string.CompareOrdinal(record.CreatedAt, seen.At) > 0))
+                            live[k] = (record.CreatedAt, m);
+                    var champions = templates.Where(t => t.Role == TemplateRoles.Champion).Select(t => t.Template).ToList();
+                    var pinned = cases.Where(c => c.Pinned).Select(c => c.CaseId).ToHashSet(StringComparer.Ordinal);
+                    var drifted = UnitCases.Drifted(champions, live.ToDictionary(p => p.Key, p => p.Value.Model, StringComparer.Ordinal), runs, pinned);
+                    if (drifted.Count == 0)
+                        await output.WriteAsync("No champion runs live on a model its unit cases have not seen.\n");
+                    foreach (var (champion, liveModel, tested) in drifted)
+                        await output.WriteAsync($"{champion.Kind}: live runs use {liveModel}, its unit cases {(tested is null ? "never ran" : $"ran on {tested}")}; run whetstone gym test --template {champion.Id}@{champion.Version}\n");
+                    return Ok;
+            }
+            var template = templates.Select(t => t.Template).FirstOrDefault(t => t.Id == id && t.Version == version);
+            if (template is null)
+                return Refuse(error, $"no stored template {id} v{version}", GymUsage);
+            if (command == "pin")
+            {
+                var picked = UnitCases.Pick(runs, template);
+                if (await admin.PinGymCasesAsync(picked, ct) is { } refused)
+                    return Fail(error, "gym", new InvalidOperationException(refused));
+                await output.WriteAsync($"Pinned {picked.Count} of {UnitCases.PerTemplate} unit cases for {template.Id} v{template.Version}.\n");
+                return Ok;
+            }
+            if (runner is null)
+                return Refuse(error, "no gym client is configured: the chargehand runner is not built yet (ADR 0006)", GymUsage);
+            var unit = cases.Where(c => c.Pinned && c.TaskKind == template.Kind).ToList();
+            var mine = runs.Where(r => r.TemplateId == template.Id && r.TemplateVersion == template.Version).ToList();
+            var prompts = new Dictionary<string, string>(StringComparer.Ordinal);
+            var wanted = unit.Select(c => c.SourceRequestId).ToHashSet(StringComparer.Ordinal);
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                if (wanted.Contains(record.RequestId))
+                    prompts[record.RequestId] = record.Prompt;
+            var fresh = new List<GymRun>();
+            foreach (var c in unit)
+            {
+                if (!prompts.TryGetValue(c.SourceRequestId, out var prompt) || template.Render(prompt, new EnhanceContext(c.Repository, c.Commit, c.TaskKind)) is not { } framed)
+                    continue;
+                var at = clock();
+                var result = await runner.RunAsync(new ReplayRequest(c.CaseId, c.Repository, c.Commit, framed, UnitCases.Arm), ct);
+                fresh.Add(new GymRun($"{c.CaseId[..12]}-unit-{at.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture)}", c.CaseId, UnitCases.Arm,
+                    template.Id, template.Version, runner.Client, result with { Answer = null }, at));
+            }
+            var baseline = mine.Where(r => fresh.Any(f => f.CaseId == r.CaseId)).GroupBy(r => r.CaseId).Select(g => g.OrderByDescending(r => r.StartedAt).First()).ToList();
+            var report = UnitCases.Test(baseline, fresh);
+            if (await admin.AddGymResultsAsync(fresh, [], ct) is { } notStored)
+                return Fail(error, "gym", new InvalidOperationException(notStored));
+            await output.WriteAsync($"{template.Id} v{template.Version} on {report.Cases} unit cases: {(report.Passed ? "pass" : "fail")} ({report.Why}).\n");
+            return report.Passed ? Ok : Failed;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or HttpRequestException)
         {
             return Fail(error, "gym", e);
         }
@@ -211,6 +307,8 @@ public static partial class Commands
                 return Refuse(error, "a label command is list or set", LabelUsage);
         }
     }
+
+    private static string Percent(int part, int whole) => whole == 0 ? "-" : FormattableString.Invariant($"{100.0 * part / whole:0}% ({part}/{whole})");
 
     private static string Yes(bool? value) => value switch { true => "yes", false => "no", null => "-" };
 

@@ -89,6 +89,9 @@ public interface IStoreAdmin
     /// <summary>Stores replay runs and verdicts in one transaction. Null when done, else why not.</summary>
     Task<string?> AddGymResultsAsync(IReadOnlyList<Whetstone.Gym.GymRun> runs, IReadOnlyList<Whetstone.Gym.GymVerdict> verdicts, CancellationToken ct);
 
+    /// <summary>Marks replay cases as a template's unit cases (pinned). Null when done, else why not.</summary>
+    Task<string?> PinGymCasesAsync(IReadOnlyList<string> caseIds, CancellationToken ct);
+
     /// <summary>Sets (or, with null, clears) the owner's hand label on one request. Null when done, else why not.</summary>
     Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct);
 
