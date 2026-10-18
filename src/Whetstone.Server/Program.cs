@@ -20,6 +20,9 @@ const string Usage = """
                                             promotion rule says (reads only)
       template list|add|promote|retire      the owner's act on templates: add a challenger, promote it over the champion, retire
                                             a version (options: whetstone template without arguments)
+      outcomes collect --root DIR [--forge github] [--confirm]
+                                            delayed outcomes (commits, reverts, merged pull requests, first-push CI) for
+                                            requests with a session, from the checkouts under DIR; counts until --confirm
       reindex                               upgrade an older store file and rebuild its search index
       forget (--all | [--repository R] [--before DATE] [--text REGEX] [--imported]) [--confirm]
                                             counts what would be deleted; with --confirm, deletes it
@@ -90,6 +93,9 @@ switch (args)
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:
         return await Commands.ImportAsync(importOptions, stores.ForUser(user), stores.AdminFor(user), new GitHistory(), Console.Out, Console.Error, cts.Token);
+    case ["outcomes", .. var outcomesOptions]:
+        return await Commands.OutcomesAsync(outcomesOptions, stores.ForUser(user), stores.AdminFor(user), root => new GitOutcomes(root), new GitHubForge(),
+            Console.Out, Console.Error, cts.Token);
     case ["forget", .. var forgetOptions]:
         return await Commands.ForgetAsync(forgetOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["mcp"]:
