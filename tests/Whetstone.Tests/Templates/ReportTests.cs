@@ -138,6 +138,29 @@ public sealed class ReportTests : IDisposable
     }
 
     [Fact]
+    public async Task Report_lists_each_template_version_with_its_uses_outcomes_and_the_trial_state()
+    {
+        var templates = _stores.TemplatesFor("owner");
+        await templates.SeedAsync(BuiltInTemplates.All, TemplateRoles.Champion, CancellationToken.None);
+        await templates.SeedAsync([new Template("explore-b", "1", "agent/explore", "", "Another text.", "hand")], TemplateRoles.Challenger, CancellationToken.None);
+        for (var i = 0; i < 5; i++)
+            await Record($"c{i}", "agent/explore", Arms.Champion, At.AddMinutes(i), completed: i != 0, template: "agent-brief-readonly");
+        for (var i = 0; i < 3; i++)
+            await Record($"t{i}", "agent/explore", Arms.Challenger, At.AddMinutes(20 + i), completed: true, template: "explore-b");
+        await Record("t9", "agent/explore", Arms.Challenger, At.AddMinutes(30), template: "explore-b");
+        await Record("h0", "agent/explore", Arms.HeldOut, At.AddMinutes(40), completed: false);
+
+        var text = await Report();
+
+        Assert.Contains("by version (every stored run):", text, StringComparison.Ordinal);
+        Assert.Contains("agent-brief-readonly v1 (champion), current champion: 5 uses, 5 with an outcome, completed 80% (4/5)", text, StringComparison.Ordinal);
+        Assert.Contains("explore-b v1 (challenger), on trial: 4 uses, 3 with an outcome, completed 100% (3/3)", text, StringComparison.Ordinal);
+        Assert.Contains("no template (held out): 1 uses, 1 with an outcome, completed 0% (0/1)", text, StringComparison.Ordinal);
+        Assert.Contains("median 2 s", text, StringComparison.Ordinal);
+        Assert.Contains("trial: explore-b v1 has 3 counted runs; first decision at 30", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Report_on_an_empty_or_missing_store_says_so_and_creates_nothing()
     {
         var text = await Report();

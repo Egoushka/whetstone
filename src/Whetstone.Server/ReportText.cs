@@ -29,6 +29,7 @@ internal static class ReportText
                         .Append(stats.MedianCost is { } cost ? $", median cost {cost:0} (of {stats.Costed} runs)" : "")
                         .Append(stats.MedianDurationMs is { } ms ? $", median duration {ms / 1000:0.#} s" : "").Append('\n');
             }
+            AppendVersions(text, kind);
             if (kind.SampleRatio is { } ratio)
                 text.Append("  sample ratio: ").Append(ratio).Append('\n');
             if (kind.Monitor is { } monitor)
@@ -39,6 +40,38 @@ internal static class ReportText
         text.Append("\nThe report decides nothing: a verdict is applied by the owner.\n");
         return text.ToString();
     }
+
+    private static void AppendVersions(StringBuilder text, KindReport kind)
+    {
+        if (kind.Versions is not { Count: > 0 } versions)
+            return;
+        text.Append("  by version (every stored run):\n");
+        foreach (var v in versions)
+        {
+            var name = v.TemplateId is null ? (v.Arm == Arms.HeldOut ? "no template (held out)" : "no template") : $"{v.TemplateId} v{v.TemplateVersion} ({v.Arm})";
+            var current = kind.Templates.Champion is { } c && c.Id == v.TemplateId && c.Version == v.TemplateVersion ? ", current champion"
+                : kind.Templates.Challenger is { } t && t.Id == v.TemplateId && t.Version == v.TemplateVersion ? ", on trial" : "";
+            text.Append("    ").Append(name).Append(current).Append(CultureInfo.InvariantCulture, $": {v.Uses} uses, {v.Reported} with an outcome")
+                .Append(v.Reported > 0 ? $", completed {Percent(v.Completed, v.Reported)}" : "")
+                .Append(v.AskedAgainReported > 0 ? $", asked again {Percent(v.AskedAgain, v.AskedAgainReported)}" : "")
+                .Append(Median("tokens in", v.MedianTokensIn)).Append(Median("out", v.MedianTokensOut)).Append(Median("cache read", v.MedianCacheReadTokens))
+                .Append(v.MedianDurationMs is { } ms ? $", median {ms / 1000:0.#} s" : "")
+                .Append(v.MedianCost is { } cost ? $", median cost {cost:0}" : "").Append('\n');
+        }
+        if (kind.Templates.Challenger is { } challenger)
+        {
+            var counted = kind.Counted.TryGetValue(Arms.Challenger, out var arm) ? arm.Runs : 0;
+            var next = Trials.LookRuns.FirstOrDefault(l => l > counted);
+            text.Append("  trial: ").Append(challenger.Id).Append(" v").Append(challenger.Version).Append(CultureInfo.InvariantCulture, $" has {counted} counted runs; ")
+                .Append(next == 0 ? "past the last look" : $"first decision at {next}").Append('\n');
+        }
+        else
+        {
+            text.Append("  trial: none running\n");
+        }
+    }
+
+    private static string Median(string label, double? value) => value is { } v ? string.Create(CultureInfo.InvariantCulture, $", median {label} {v:#,0}") : "";
 
     private static string Who(KindTemplates templates) =>
         (templates.Champion is { } champion ? $"champion {champion.Id} v{champion.Version}" : "no champion (held out entirely)")

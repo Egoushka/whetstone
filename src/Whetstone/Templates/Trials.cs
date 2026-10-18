@@ -17,13 +17,24 @@ public sealed record CostWeights(double Input, double CacheWrite, double CacheRe
 }
 
 /// <summary>One run of a kind, reduced to what a trial compares.</summary>
-public sealed record TrialRun(DateTimeOffset At, string? Arm, bool? Completed, bool? AskedAgain, double? Cost, long? DurationMs, string? Model)
+public sealed record TrialRun(
+    DateTimeOffset At, string? Arm, bool? Completed, bool? AskedAgain, double? Cost, long? DurationMs, string? Model,
+    string? TemplateId = null, string? TemplateVersion = null, long? TokensIn = null, long? TokensOut = null, long? CacheReadTokens = null)
 {
     public static TrialRun From(ExportRecord record, CostWeights weights) => new(
         DateTimeOffset.Parse(record.CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal),
         record.Answer.Arm ?? (record.Answer.HeldOut ? Arms.HeldOut : null),
-        record.Outcome?.Completed, record.Outcome?.AskedAgain, weights.Of(record.Outcome), record.Outcome?.DurationMs, record.Outcome?.Model);
+        record.Outcome?.Completed, record.Outcome?.AskedAgain, weights.Of(record.Outcome), record.Outcome?.DurationMs, record.Outcome?.Model,
+        record.Answer.TemplateId, record.Answer.TemplateVersion, record.Outcome?.TokensIn, record.Outcome?.TokensOut, record.Outcome?.CacheReadTokens);
 }
+
+/// <summary>
+/// What one template version (or the absence of one) did for a kind, over every stored run, not only the model window the trial
+/// counts: <paramref name="Uses"/> served, <paramref name="Reported"/> of them with a completion, and the medians of what was reported.
+/// </summary>
+public sealed record VersionStats(
+    string? TemplateId, string? TemplateVersion, string Arm, int Uses, int Reported, int Completed, int AskedAgainReported, int AskedAgain,
+    double? MedianTokensIn, double? MedianTokensOut, double? MedianCacheReadTokens, double? MedianDurationMs, double? MedianCost, DateTimeOffset LastUsed);
 
 /// <summary>What the rule says at one look (design, "Promotion rule").</summary>
 /// <param name="Verdict"><c>promote</c>, <c>retire</c> or <c>keep running</c>.</param>
@@ -32,7 +43,7 @@ public sealed record LookResult(int Runs, int ChampionRuns, double Z, string Ver
 /// <summary>Everything the report says about one kind.</summary>
 public sealed record KindReport(
     string Kind, KindTemplates Templates, IReadOnlyDictionary<string, int> Runs, string? Model, IReadOnlyDictionary<string, ArmStats> Counted,
-    IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor);
+    IReadOnlyList<LookResult> Looks, string? SampleRatio, string? Monitor, IReadOnlyList<VersionStats>? Versions = null);
 
 /// <summary>An arm's counted runs: those with a completion, in the model's evidence window.</summary>
 public sealed record ArmStats(int Runs, int Completed, double? MedianCost, int Costed, double? MedianDurationMs);
@@ -74,7 +85,7 @@ public static class Trials
             var cutoff = challenger[look - 1].At;
             looks.Add(Decide(look, [.. challenger.Take(look)], [.. champion.Where(r => r.At <= cutoff)]));
         }
-        return new KindReport(kind, templates, runs, model, stats, looks, SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0), Monitor(champion, Of(Arms.HeldOut)));
+        return new KindReport(kind, templates, runs, model, stats, looks, SampleRatio(runs, templates.Challenger is not null || challenger.Count > 0), Monitor(champion, Of(Arms.HeldOut)), PerVersion(all));
     }
 
     /// <summary>
@@ -92,6 +103,20 @@ public static class Trials
             start--;
         return (measured[start..], model);
     }
+
+    /// <summary>One row per template version and arm that served a run; the runs with no template last, newest use first within each.</summary>
+    internal static List<VersionStats> PerVersion(IReadOnlyList<TrialRun> all) => [.. all
+        .GroupBy(r => (r.TemplateId, r.TemplateVersion, Arm: r.Arm ?? "none"))
+        .Select(g =>
+        {
+            double? MedianOf(Func<TrialRun, long?> pick) => Median([.. g.Select(pick).Where(v => v is not null).Select(v => (double)v!.Value)]);
+            var asked = g.Where(r => r.AskedAgain is not null).ToList();
+            return new VersionStats(
+                g.Key.TemplateId, g.Key.TemplateVersion, g.Key.Arm, g.Count(), g.Count(r => r.Completed is not null), g.Count(r => r.Completed == true),
+                asked.Count, asked.Count(r => r.AskedAgain == true), MedianOf(r => r.TokensIn), MedianOf(r => r.TokensOut), MedianOf(r => r.CacheReadTokens),
+                MedianOf(r => r.DurationMs), Median([.. g.Where(r => r.Cost is not null).Select(r => r.Cost!.Value)]), g.Max(r => r.At));
+        })
+        .OrderBy(v => v.TemplateId is null ? 1 : 0).ThenByDescending(v => v.LastUsed)];
 
     private static ArmStats Stats(List<TrialRun> runs)
     {
