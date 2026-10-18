@@ -73,7 +73,7 @@ public sealed class IndexTests : IDisposable
         await Record("req-1", "stream the invoice parser");
         await Record("req-2", "rotate the signing certificate");
 
-        Assert.Equal(7L, Pragma(_data.FileFor("owner"), "user_version"));
+        Assert.Equal(8L, Pragma(_data.FileFor("owner"), "user_version"));
         Assert.Equal(["req-1"], Search("invoice"));
         Assert.Equal(["req-2"], Search("certificate"));
         Assert.Empty(Search("nothing"));
@@ -86,7 +86,7 @@ public sealed class IndexTests : IDisposable
 
         await Record("new-1", "another quokkaflux question");
 
-        Assert.Equal(7L, Pragma(file, "user_version"));
+        Assert.Equal(8L, Pragma(file, "user_version"));
         Assert.Equal(["new-1", "old-1"], Search("quokkaflux"));
         Assert.Equal(3, Db.Requests(file).Count);
         Assert.Contains(Db.Requests(file), r => (string)r["request_id"]! == "old-1" && (string)r["prompt"]! == "migrate the quokkaflux table" && r["source_request_id"] is null);
@@ -106,7 +106,7 @@ public sealed class IndexTests : IDisposable
 
         await Record("new-1", "after the upgrade");
 
-        Assert.Equal(7L, Pragma(file, "user_version"));
+        Assert.Equal(8L, Pragma(file, "user_version"));
         var old = Assert.Single(Db.Requests(file), r => (string)r["request_id"]! == "old-1");
         Assert.All(Db.MeasureColumns, c => Assert.Null(old[c]));
     }
@@ -126,7 +126,7 @@ public sealed class IndexTests : IDisposable
 
         await Record("new-1", "after the upgrade");
 
-        Assert.Equal(7L, Pragma(file, "user_version"));
+        Assert.Equal(8L, Pragma(file, "user_version"));
         var old = Assert.Single(Db.Requests(file), r => (string)r["request_id"]! == "old-1");
         Assert.All(Db.RewardColumns.Append("session_id"), c => Assert.Null(old[c]));
         Assert.Null(old["hand_label"]);
@@ -232,7 +232,7 @@ public sealed class IndexTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Equal("Indexed 2 requests.\n", output.ToString());
-        Assert.Equal(7L, Pragma(file, "user_version"));
+        Assert.Equal(8L, Pragma(file, "user_version"));
         Assert.Equal(["old-1"], Search("quokkaflux"));
     }
 

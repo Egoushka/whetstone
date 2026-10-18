@@ -34,7 +34,8 @@
         "correction_reason": { "enum": ["wrong_target", "incomplete", "wrong_approach", "misread", "too_much", "style", "new_info", "stop", "other", null], "description": "Why the next prompt corrected the run, when it did." },
         "review_findings": { "type": ["integer", "null"], "minimum": 0, "description": "Problems a reviewer found in the change the run produced." },
         "review_findings_severe": { "type": ["integer", "null"], "minimum": 0, "description": "Of those, the ones the reviewer marked blocking." },
-        "person_ms": { "type": ["integer", "null"], "minimum": 0, "description": "The person's time on the request: typing it, answering approvals, typing rework follow-ups." }
+        "person_ms": { "type": ["integer", "null"], "minimum": 0, "description": "The person's time on the request: typing it, answering approvals, typing rework follow-ups." },
+        "rewritten_prompt": { "type": ["string", "null"], "description": "What the client's model wrote in place of the prompt, whether the person sent it or reverted it (rewrite_accepted says which)." }
       }
     }
   }

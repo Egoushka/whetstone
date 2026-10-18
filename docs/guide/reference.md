@@ -170,6 +170,7 @@ The arguments are [feedback.schema.json](../../schemas/feedback/v1/feedback.sche
 | `outcome.correction_reason` | one of `wrong_target`, `incomplete`, `wrong_approach`, `misread`, `too_much`, `style`, `new_info`, `stop`, `other`, or null | Why the next prompt corrected the run |
 | `outcome.review_findings`, `review_findings_severe` | integer or null | 0 or more; problems a reviewer found in the produced change, and those marked blocking |
 | `outcome.person_ms` | integer or null | 0 or more; the person's time on the request |
+| `outcome.rewritten_prompt` | string or null | What the client's model wrote in place of the prompt, sent or reverted (`rewrite_accepted` says which); redacted and cut like a prompt. `export` carries it beside the original `prompt` as a rewrite pair (store schema version 8). Capture only: nothing is trained on it |
 
 The run measures (`completed` to `effort`) came with schema version 3 of the store and are optional within `feedback/v1`. A measure left out is stored as missing, never zero, and a later report for the same request adds the measures it has without erasing one an earlier report gave ([StoreTests.cs](../../tests/Whetstone.Tests/Storage/StoreTests.cs)). `export` writes them inside `outcome`, and leaves out the ones nobody reported.
 

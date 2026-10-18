@@ -133,7 +133,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
               commits = COALESCE($commits, commits), pr_merged = COALESCE($merged, pr_merged), ci_first_push_green = COALESCE($green, ci_first_push_green),
               reverted = COALESCE($reverted, reverted), item_closed = COALESCE($closed, item_closed), correction_reason = COALESCE($reason, correction_reason),
               review_findings = COALESCE($findings, review_findings), review_findings_severe = COALESCE($severe, review_findings_severe),
-              person_ms = COALESCE($person, person_ms)
+              person_ms = COALESCE($person, person_ms), rewritten_prompt = COALESCE($rewrite, rewritten_prompt)
             WHERE request_id = $id
             """;
         command.Parameters.AddWithValue("$id", outcome.RequestId);
@@ -162,6 +162,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$findings", (object?)outcome.ReviewFindings ?? DBNull.Value);
         command.Parameters.AddWithValue("$severe", (object?)outcome.ReviewFindingsSevere ?? DBNull.Value);
         command.Parameters.AddWithValue("$person", (object?)outcome.PersonMs ?? DBNull.Value);
+        command.Parameters.AddWithValue("$rewrite", (object?)outcome.RewrittenPrompt ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct) > 0;
 

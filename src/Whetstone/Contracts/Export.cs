@@ -45,4 +45,5 @@ public sealed record ExportOutcome(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CorrectionReason = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ReviewFindings = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ReviewFindingsSevere = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? PersonMs = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? PersonMs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RewrittenPrompt = null);
