@@ -37,6 +37,9 @@ public static partial class PromptKinds
     [GeneratedRegex(@"[A-Za-z]+", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex Word();
 
+    [GeneratedRegex(@"\p{L}+", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex AnyWord();
+
     /// <summary>The kind of the prompt an agent wrote for a subagent.</summary>
     public static string ForAgent(string? subagentType, string? description)
     {
@@ -57,7 +60,7 @@ public static partial class PromptKinds
         var text = (prompt ?? "").Trim();
         if (text.Length < MinTypedChars)
             return Other;
-        var words = Word().Matches(text.Length > 120 ? text[..120] : text).Select(m => m.Value.ToLowerInvariant()).Take(3).ToList();
+        var words = AnyWord().Matches(text.Length > 120 ? text[..120] : text).Select(m => m.Value.ToLowerInvariant()).Take(3).ToList();
         foreach (var word in words)
             if (TypedVerbs.TryGetValue(word, out var job))
                 return $"typed/{job}";
@@ -65,12 +68,12 @@ public static partial class PromptKinds
     }
 
     private static readonly Dictionary<string, string> TypedVerbs = Build(
-        ("continue", "continue resume proceed"),
-        ("ship", "merge push rebase release deploy ship"),
-        ("debug", "fix debug diagnose troubleshoot broken failing fails crash"),
-        ("review", "review audit critique verify validate"),
-        ("research", "research investigate compare explain analyze analyse explore find summarize summarise understand"),
-        ("implement", "implement add create build write refactor migrate rename remove update extend change make"));
+        ("continue", "continue resume proceed продовжуй продовжимо продовжуйте продовж"),
+        ("ship", "merge push rebase release deploy ship змерж змержи задеплой запуш"),
+        ("debug", "fix debug diagnose troubleshoot broken failing fails crash виправ виправте полагодь налагодь діагностуй дебаж"),
+        ("review", "review audit critique verify validate перевір переглянь перегляньте оціни проаудитуй"),
+        ("research", "research investigate compare explain analyze analyse explore find summarize summarise understand дослідж досліди порівняй поясни проаналізуй знайди підсумуй"),
+        ("implement", "implement add create build write refactor migrate rename remove update extend change make реалізуй додай додайте створи створіть зроби зробіть напиши напишіть зміни змініть онови оновіть перейменуй видали перепиши винеси мігруй"));
 
     private static string? Slug(string? text)
     {

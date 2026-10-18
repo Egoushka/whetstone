@@ -14,7 +14,7 @@ namespace Whetstone.Server;
 /// commands, not MCP tools, so no client and no agent can call them. Options are strict: an unknown or repeated option is a usage
 /// error, never a wider selection, because the second command deletes.
 /// </summary>
-public static class Commands
+public static partial class Commands
 {
     public const int Ok = 0;
     public const int Failed = 1;
@@ -91,6 +91,100 @@ public static class Commands
             return Fail(error, "replay", e);
         }
     }
+
+    public const string TemplateUsage = """
+        usage: whetstone template list
+               whetstone template add --kind K --id ID --version V --after TEXT [--before TEXT] [--source S] [--champion]
+               whetstone template promote --kind K --id ID --version V
+               whetstone template retire --kind K --id ID --version V
+        """;
+
+    /// <summary>
+    /// The owner's act on the template store (design, "Validity first": decisions are applied by the owner). <c>add</c> stores a new
+    /// version as the kind's challenger (or champion with <c>--champion</c> when it has none), <c>promote</c> makes the challenger the
+    /// champion and retires the old one, <c>retire</c> takes a version out of service. Retired rows stay, so the record does.
+    /// </summary>
+    public static async Task<int> TemplateAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count == 0)
+            return Refuse(error, "a template command is list, add, promote or retire", TemplateUsage);
+        var verb = options[0];
+        var rest = options.Skip(1).ToList();
+        try
+        {
+            switch (verb)
+            {
+                case "list":
+                    if (rest.Count > 0)
+                        return Refuse(error, $"unknown option '{rest[0]}'", TemplateUsage);
+                    var rows = await admin.TemplatesAsync(ct);
+                    if (rows.Count == 0)
+                        await output.WriteAsync("No templates are stored.\n");
+                    foreach (var row in rows.OrderBy(r => r.Template.Kind, StringComparer.Ordinal).ThenBy(r => r.CreatedAt))
+                        await output.WriteAsync($"{row.Template.Kind}  {row.Template.Id} v{row.Template.Version}  {row.Role}  ({row.Template.Source}, {row.CreatedAt:yyyy-MM-dd})\n");
+                    return Ok;
+                case "add":
+                    {
+                        if (!Parse(rest, ["--kind", "--id", "--version", "--before", "--after", "--source"], ["--champion"], out var add, out var problem))
+                            return Refuse(error, problem!, TemplateUsage);
+                        if (!Identity(add!, out var kind, out var id, out var version, out problem))
+                            return Refuse(error, problem!, TemplateUsage);
+                        var template = new Template(id, version, kind, add!.GetValueOrDefault("--before", ""), add!.GetValueOrDefault("--after", ""), add!.GetValueOrDefault("--source", "hand"));
+                        if (template.Before.Length == 0 && template.After.Length == 0)
+                            return Refuse(error, "a template needs --before or --after text", TemplateUsage);
+                        if (template.UnknownSlots().ToList() is { Count: > 0 } unknown)
+                            return Refuse(error, $"unknown slot {{{{{unknown[0]}}}}}; whetstone fills repository, commit and task_kind", TemplateUsage);
+                        if (template.Render("x", null) is null)
+                            return Refuse(error, "the template cannot be rendered", TemplateUsage);
+                        var role = add!.ContainsKey("--champion") ? TemplateRoles.Champion : TemplateRoles.Challenger;
+                        return Report(await admin.AddTemplateAsync(template, role, ct), $"Stored {id} v{version} for {kind} as {role}.", output, error);
+                    }
+                case "promote" or "retire":
+                    {
+                        if (!Parse(rest, ["--kind", "--id", "--version"], [], out var change, out var problem))
+                            return Refuse(error, problem!, TemplateUsage);
+                        if (!Identity(change!, out var kind, out var id, out var version, out problem))
+                            return Refuse(error, problem!, TemplateUsage);
+                        return verb == "promote"
+                            ? Report(await admin.PromoteTemplateAsync(kind, id, version, ct), $"{id} v{version} is now the champion for {kind}; the previous champion is retired.", output, error)
+                            : Report(await admin.RetireTemplateAsync(kind, id, version, ct), $"{id} v{version} is retired for {kind}.", output, error);
+                    }
+                default:
+                    return Refuse(error, $"unknown template command '{verb}'", TemplateUsage);
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "template", e);
+        }
+    }
+
+    private static bool Identity(Dictionary<string, string> options, out string kind, out string id, out string version, out string? problem)
+    {
+        (kind, id, version) = (options.GetValueOrDefault("--kind", ""), options.GetValueOrDefault("--id", ""), options.GetValueOrDefault("--version", ""));
+        problem = null;
+        if (kind.Length == 0 || id.Length == 0 || version.Length == 0)
+            problem = "--kind, --id and --version are all needed";
+        else if (kind == Whetstone.Kinds.PromptKinds.Other)
+            problem = "kind 'other' is never templated";
+        else if (!NamePattern().IsMatch(id) || !NamePattern().IsMatch(version))
+            problem = "--id and --version are 1 to 64 characters of letters, digits, '.', '_' and '-'";
+        return problem is null;
+    }
+
+    private static int Report(string? problem, string done, TextWriter output, TextWriter error)
+    {
+        if (problem is not null)
+        {
+            error.Write($"whetstone: template: {problem}\n");
+            return Failed;
+        }
+        output.Write(done + "\n");
+        return Ok;
+    }
+
+    [GeneratedRegex(@"^[A-Za-z0-9._-]{1,64}$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex NamePattern();
 
     public const string ReportUsage = "usage: whetstone report";
 
