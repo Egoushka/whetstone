@@ -52,7 +52,7 @@ The image's health check opens `127.0.0.1:7340` with bash, because the runtime i
 
 ### report
 
-Prints, for each kind that has a template or a request with an arm: the champion and challenger, runs by arm, the counted runs (those with a reported `completed`, since the model last changed) with completion, median cost and median duration, the sample-ratio check against the planned split, the regression monitor (champion against the held-out arm) and, for each look the challenger has reached (30, 60, 100, 150, 200 counted runs), what the promotion rule says. It decides nothing; applying a verdict is the owner's act ([Trials.cs](../../src/Whetstone/Templates/Trials.cs), [ReportTests.cs](../../tests/Whetstone.Tests/Templates/ReportTests.cs)). Cost is tokens weighted 1, 1.25, 0.1 and 5 for input, cache write, cache read and output, and is left out of a run missing any of the four counts.
+Prints, for each kind that has a template or a request with an arm: the champion and challenger, runs by arm, the counted runs (those with a reported `completed`, since the model last changed) with completion, median cost, median duration, rework, median person time and the cache-read share (a share more than 10 points below the arm it is compared with is flagged), the sample-ratio check against the planned split, the regression monitor (champion against the held-out arm) and, for each look the challenger has reached (30, 60, 100, 150, 200 counted runs), what the promotion rule says. It decides nothing; applying a verdict is the owner's act ([Trials.cs](../../src/Whetstone/Templates/Trials.cs), [ReportTests.cs](../../tests/Whetstone.Tests/Templates/ReportTests.cs)). Cost is tokens weighted 1, 1.25, 0.1 and 5 for input, cache write, cache read and output, and is left out of a run missing any of the four counts.
 
 ### Templates and arms
 
@@ -91,6 +91,8 @@ It also stores the prompts agents wrote, counted on a second line (`N prompts wr
 | `WHETSTONE_USER` | `owner` | every command; 1 to 64 of `a-z`, `0-9`, `_`, `-` |
 | `WHETSTONE_DATA_DIR` | `whetstone` under the local application data directory | every command |
 | `WHETSTONE_TEMPLATES` | off | `serve` and `mcp`: `on` seeds the shipped templates and serves them (see "Templates and arms" below); anything else leaves every answer as it was |
+| `WHETSTONE_COST_WEIGHTS` | `1,1.25,0.1,5` | `report`: weights of input, cache write, cache read and output tokens in a run's cost; four numbers of 0 or more, or `report` exits 2 |
+| `WHETSTONE_PERSON_TIME_KINDS` | `typed/` | `report`: comma-separated kind prefixes whose cost-only decisions compare the person's time (`person_ms`) instead of run cost |
 | `WHETSTONE_RETRIEVAL_MIN_CHARS` | `0` | `serve` and `mcp` with retrieval on: prompts shorter than this are neither answered with a retrieval nor retrieved; read it off `replay --min-chars` |
 
 The store is `<WHETSTONE_DATA_DIR>/<WHETSTONE_USER>/whetstone.db`. `export` and `forget` for a user with no store print nothing or delete nothing, and create no file ([CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs)).

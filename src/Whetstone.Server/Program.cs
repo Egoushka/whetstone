@@ -86,7 +86,12 @@ switch (args)
     case ["replay", .. var replayOptions]:
         return await Commands.ReplayAsync(replayOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["report", .. var reportOptions]:
-        return await Commands.ReportAsync(reportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+        if (TrialSettings.From(Environment.GetEnvironmentVariable, out var settingsProblem) is not { } trialSettings)
+        {
+            Console.Error.WriteLine($"whetstone: {settingsProblem}");
+            return 2;
+        }
+        return await Commands.ReportAsync(reportOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token, trialSettings);
     case ["template", .. var templateOptions]:
         return await Commands.TemplateAsync(templateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["reindex", .. var reindexOptions]:

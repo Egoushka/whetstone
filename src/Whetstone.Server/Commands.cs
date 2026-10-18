@@ -193,8 +193,10 @@ public static partial class Commands
     /// Reads your store and prints, per kind of prompt in a template trial, the runs each arm got, how they went and what the
     /// promotion rule says (docs/specs/2026-10-10-templates-everywhere-design.md). Changes nothing.
     /// </summary>
-    public static async Task<int> ReportAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    public static async Task<int> ReportAsync(
+        IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct, TrialSettings? settings = null)
     {
+        settings ??= TrialSettings.Default;
         if (!Parse(options, [], [], out _, out var problem))
             return Refuse(error, problem!, ReportUsage);
         try
@@ -209,10 +211,10 @@ public static partial class Commands
                     g.FirstOrDefault(t => t.Role == TemplateRoles.Champion)?.Template, g.FirstOrDefault(t => t.Role == TemplateRoles.Challenger)?.Template), StringComparer.Ordinal);
             var runs = records.Where(r => r.Context.TaskKind is not null)
                 .GroupBy(r => r.Context.TaskKind!, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.Select(r => TrialRun.From(r, CostWeights.Default)).ToList(), StringComparer.Ordinal);
+                .ToDictionary(g => g.Key, g => g.Select(r => TrialRun.From(r, settings.Weights)).ToList(), StringComparer.Ordinal);
             var inTrials = runs.Where(k => current.ContainsKey(k.Key) || k.Value.Any(r => r.Arm is not null)).Select(k => k.Key)
                 .Union(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
-            var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None))).ToList();
+            var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None), settings.PersonTimeKinds)).ToList();
             var tracked = reports.Sum(r => r.Runs.Values.Sum());
             await output.WriteAsync(ReportText.Format(reports, records.Count - tracked));
             return Ok;
