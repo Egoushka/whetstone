@@ -160,6 +160,95 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         return null;
     }
 
+    public async Task<(IReadOnlyList<GymRun> Runs, IReadOnlyList<GymVerdict> Verdicts)> GymResultsAsync(CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return ([], []);
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return ([], []);
+        var runs = new List<GymRun>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT run_id, case_id, arm, template_id, template_version, client, client_run_id, preset, model, effort, completed, status,
+                       tokens_in, tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, evidence_resolved, started_at
+                FROM gym_runs ORDER BY started_at, run_id
+                """;
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                runs.Add(new GymRun(reader.GetString(0), reader.GetString(1), reader.GetString(2), Text(reader, 3), Text(reader, 4), reader.GetString(5),
+                    new ReplayResult(Flag(reader, 10), Text(reader, 11), Text(reader, 6), Text(reader, 7), Text(reader, 8), Text(reader, 9), Count(reader, 12),
+                        Count(reader, 13), Count(reader, 14), Count(reader, 15), Number(reader, 16), Count(reader, 17), Number(reader, 18)),
+                    Instant(reader.GetString(19))));
+        }
+        var verdicts = new List<GymVerdict>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT case_id, template_id, template_version, judge_model, winner, order_flipped, judge_cost_usd, decided_at FROM gym_verdicts ORDER BY decided_at";
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                verdicts.Add(new GymVerdict(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
+                    reader.GetInt64(5) != 0, Number(reader, 6), Instant(reader.GetString(7))));
+        }
+        return (runs, verdicts);
+    }
+
+    public async Task<string?> AddGymResultsAsync(IReadOnlyList<GymRun> runs, IReadOnlyList<GymVerdict> verdicts, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 6)
+            return "the store has no gym tables yet; start the server once to upgrade it";
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+        foreach (var run in runs)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO gym_runs (run_id, case_id, arm, template_id, template_version, client, client_run_id, preset, model, effort, completed, status,
+                  tokens_in, tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, evidence_resolved, started_at)
+                VALUES ($id, $case, $arm, $tid, $tversion, $client, $crun, $preset, $model, $effort, $completed, $status,
+                  $tin, $tout, $cread, $cwrite, $cost, $duration, $evidence, $at)
+                """;
+            var r = run.Result;
+            foreach (var (name, value) in new (string, object?)[]
+            {
+                ("$id", run.RunId), ("$case", run.CaseId), ("$arm", run.Arm), ("$tid", run.TemplateId), ("$tversion", run.TemplateVersion), ("$client", run.Client),
+                ("$crun", r.ClientRunId), ("$preset", r.Preset), ("$model", r.Model), ("$effort", r.Effort), ("$completed", r.Completed is { } d ? d ? 1 : 0 : null),
+                ("$status", r.Status), ("$tin", r.TokensIn), ("$tout", r.TokensOut), ("$cread", r.CacheReadTokens), ("$cwrite", r.CacheWriteTokens), ("$cost", r.CostUsd),
+                ("$duration", r.DurationMs), ("$evidence", r.EvidenceResolved), ("$at", run.StartedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture)),
+            })
+                insert.Parameters.AddWithValue(name, value ?? DBNull.Value);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+        foreach (var v in verdicts)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT OR REPLACE INTO gym_verdicts (case_id, template_id, template_version, judge_model, winner, order_flipped, judge_cost_usd, decided_at)
+                VALUES ($case, $tid, $tversion, $judge, $winner, $flipped, $cost, $at)
+                """;
+            insert.Parameters.AddWithValue("$case", v.CaseId);
+            insert.Parameters.AddWithValue("$tid", v.TemplateId);
+            insert.Parameters.AddWithValue("$tversion", v.TemplateVersion);
+            insert.Parameters.AddWithValue("$judge", v.JudgeModel);
+            insert.Parameters.AddWithValue("$winner", v.Winner);
+            insert.Parameters.AddWithValue("$flipped", v.OrderFlipped ? 1 : 0);
+            insert.Parameters.AddWithValue("$cost", (object?)v.CostUsd ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$at", v.DecidedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return null;
+    }
+
+    private static DateTimeOffset Instant(string text) => DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
     public async Task<string?> LabelAsync(string requestId, bool? label, CancellationToken ct)
     {
         if (!File.Exists(path))
