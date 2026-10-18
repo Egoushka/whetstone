@@ -147,7 +147,7 @@ public static class Importer
             {
                 var committed = history.CommittedBetween(session.WorkingDirectory, session.Prompts[0].At, session.LastActivity + Grace);
                 var scores = ImplicitOutcome.Scores([.. session.Prompts.Select(p => p.Text)], committed);
-                var context = new EnhanceContext(Repository: repository, Client: Client);
+                var context = new EnhanceContext(Repository: repository, Client: Client, SessionId: SessionIdFor(session.SessionId));
                 for (var i = 0; i < session.Prompts.Count; i++)
                 {
                     var prompt = session.Prompts[i];
@@ -206,6 +206,10 @@ public static class Importer
     /// <summary>The outcome, or null when it says nothing, so an unmeasured run stays unmeasured. A model alone is kept: it says which model ran.</summary>
     private static FeedbackOutcome? Measured(FeedbackOutcome outcome) =>
         outcome with { } == new FeedbackOutcome() ? null : outcome;
+
+    /// <summary>An opaque session id from the transcript's, which is never stored itself (docs/privacy.md).</summary>
+    public static string SessionIdFor(string transcriptSessionId) =>
+        "s-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("session:" + transcriptSessionId)))[..32];
 
     /// <summary>A stable id from the transcript's message id, which is never stored itself.</summary>
     public static string IdFor(TypedPrompt prompt) =>

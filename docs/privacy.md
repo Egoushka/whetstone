@@ -8,8 +8,8 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | what | from goal | kept |
 |---|---|---|
 | the prompt as sent, with secrets redacted | 0.2 | until deleted |
-| the context the client sent (repository, commit, task kind, client) | 0.2 | until deleted |
-| the outcome from `feedback` | 0.2 | until deleted |
+| the context the client sent (repository, commit, task kind, client, session id) | 0.2 (session id 0.6) | until deleted |
+| the outcome from `feedback`, including delayed outcomes, correction reasons, review finding counts and the person's time | 0.2 (rewards 0.6) | until deleted |
 | a search index over the stored prompt (words only, no other text) | 0.3 | until deleted; rebuilt on every `forget` |
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |

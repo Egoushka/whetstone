@@ -111,6 +111,7 @@ The arguments are the `request` part of [enhance.schema.json](../../schemas/enha
 | `context.commit` | string | Optional; 7 to 40 lowercase hex |
 | `context.task_kind` | string | Optional |
 | `context.client` | string | Optional |
+| `context.session_id` | string | Optional; 1 to 128 characters, opaque; requests that share it share a session |
 | `deadline_ms` | integer | 50 to 30000; default 1500 |
 
 The result has structured content and the prompt as text:
@@ -146,8 +147,15 @@ The arguments are [feedback.schema.json](../../schemas/feedback/v1/feedback.sche
 | `outcome.duration_ms`, `outcome.tool_calls` | integer or null | 0 or more |
 | `outcome.asked_again` | boolean or null | The author repeated or corrected the request in the same turn |
 | `outcome.effort` | string or null | The effort the run used; redacted before storage |
+| `outcome.commits` | integer or null | 0 or more; commits the request's work made |
+| `outcome.pr_merged`, `ci_first_push_green`, `reverted`, `item_closed` | boolean or null | A pull request with that work merged; CI passed on its first push; a commit of it reverted within 7 days; the tracker item closed |
+| `outcome.correction_reason` | one of `wrong_target`, `incomplete`, `wrong_approach`, `misread`, `too_much`, `style`, `new_info`, `stop`, `other`, or null | Why the next prompt corrected the run |
+| `outcome.review_findings`, `review_findings_severe` | integer or null | 0 or more; problems a reviewer found in the produced change, and those marked blocking |
+| `outcome.person_ms` | integer or null | 0 or more; the person's time on the request |
 
 The run measures (`completed` to `effort`) came with schema version 3 of the store and are optional within `feedback/v1`. A measure left out is stored as missing, never zero, and a later report for the same request adds the measures it has without erasing one an earlier report gave ([StoreTests.cs](../../tests/Whetstone.Tests/Storage/StoreTests.cs)). `export` writes them inside `outcome`, and leaves out the ones nobody reported.
+
+The reward measures (`commits` to `person_ms`, [the design](../specs/2026-10-19-reward-signals-design.md)) and `context.session_id` came with schema version 5. They often arrive later than the run measures, in a report of their own, so since version 5 no field of a report erases what an earlier report gave, the first five included: a later value replaces an earlier one, a missing value leaves it. `import claude-code` fills `session_id` with a hash of the transcript's session id, never the id itself.
 
 A score outside 0 to 1 is an error ([HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)).
 

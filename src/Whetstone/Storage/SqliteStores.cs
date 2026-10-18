@@ -82,8 +82,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT OR REPLACE INTO requests
-              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm)
-            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm)
+              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id)
+            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session)
             """;
         command.Parameters.AddWithValue("$id", row.RequestId);
         command.Parameters.AddWithValue("$at", Text(row.CreatedAt));
@@ -99,6 +99,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$cut", row.Truncated ? 1 : 0);
         command.Parameters.AddWithValue("$source", (object?)row.SourceRequestId ?? DBNull.Value);
         command.Parameters.AddWithValue("$arm", (object?)row.Arm ?? DBNull.Value);
+        command.Parameters.AddWithValue("$session", (object?)row.SessionId ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct);
 
@@ -106,12 +107,16 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
     {
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            UPDATE requests SET rewrite_accepted = $accepted, model_overridden = $overridden, score = $score, cost_usd = $cost,
-              model = $model, feedback_at = $at,
+            UPDATE requests SET rewrite_accepted = COALESCE($accepted, rewrite_accepted), model_overridden = COALESCE($overridden, model_overridden),
+              score = COALESCE($score, score), cost_usd = COALESCE($cost, cost_usd), model = COALESCE($model, model), feedback_at = $at,
               completed = COALESCE($completed, completed), tokens_in = COALESCE($tin, tokens_in), tokens_out = COALESCE($tout, tokens_out),
               cache_read_tokens = COALESCE($cread, cache_read_tokens), cache_write_tokens = COALESCE($cwrite, cache_write_tokens),
               duration_ms = COALESCE($duration, duration_ms), tool_calls = COALESCE($tools, tool_calls),
-              asked_again = COALESCE($asked, asked_again), effort = COALESCE($effort, effort)
+              asked_again = COALESCE($asked, asked_again), effort = COALESCE($effort, effort),
+              commits = COALESCE($commits, commits), pr_merged = COALESCE($merged, pr_merged), ci_first_push_green = COALESCE($green, ci_first_push_green),
+              reverted = COALESCE($reverted, reverted), item_closed = COALESCE($closed, item_closed), correction_reason = COALESCE($reason, correction_reason),
+              review_findings = COALESCE($findings, review_findings), review_findings_severe = COALESCE($severe, review_findings_severe),
+              person_ms = COALESCE($person, person_ms)
             WHERE request_id = $id
             """;
         command.Parameters.AddWithValue("$id", outcome.RequestId);
@@ -121,7 +126,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$score", (object?)outcome.Score ?? DBNull.Value);
         command.Parameters.AddWithValue("$cost", outcome.CostUsd is { } c ? (double)c : DBNull.Value);
         command.Parameters.AddWithValue("$model", (object?)outcome.Model ?? DBNull.Value);
-        // A later report adds the measures it has and never erases one an earlier report gave.
+        // A later report adds what it has and never erases what an earlier report gave: delayed outcomes arrive in a report of their own.
         command.Parameters.AddWithValue("$completed", outcome.Completed is { } d ? d ? 1 : 0 : DBNull.Value);
         command.Parameters.AddWithValue("$tin", (object?)outcome.TokensIn ?? DBNull.Value);
         command.Parameters.AddWithValue("$tout", (object?)outcome.TokensOut ?? DBNull.Value);
@@ -131,6 +136,15 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$tools", (object?)outcome.ToolCalls ?? DBNull.Value);
         command.Parameters.AddWithValue("$asked", outcome.AskedAgain is { } k ? k ? 1 : 0 : DBNull.Value);
         command.Parameters.AddWithValue("$effort", (object?)outcome.Effort ?? DBNull.Value);
+        command.Parameters.AddWithValue("$commits", (object?)outcome.Commits ?? DBNull.Value);
+        command.Parameters.AddWithValue("$merged", Flag(outcome.PrMerged));
+        command.Parameters.AddWithValue("$green", Flag(outcome.CiFirstPushGreen));
+        command.Parameters.AddWithValue("$reverted", Flag(outcome.Reverted));
+        command.Parameters.AddWithValue("$closed", Flag(outcome.ItemClosed));
+        command.Parameters.AddWithValue("$reason", (object?)outcome.CorrectionReason ?? DBNull.Value);
+        command.Parameters.AddWithValue("$findings", (object?)outcome.ReviewFindings ?? DBNull.Value);
+        command.Parameters.AddWithValue("$severe", (object?)outcome.ReviewFindingsSevere ?? DBNull.Value);
+        command.Parameters.AddWithValue("$person", (object?)outcome.PersonMs ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct) > 0;
 
@@ -207,6 +221,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         await transaction.CommitAsync(ct);
         return 0;
     }, ct);
+
+    private static object Flag(bool? value) => value is { } v ? v ? 1 : 0 : DBNull.Value;
 
     private static string Text(DateTimeOffset at) => at.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 

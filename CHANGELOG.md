@@ -8,9 +8,11 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 ### Changed
 
 - The roadmap after 0.5: goals 0.6 to 0.12 (reward signals, evidence volume, replay, context, levels and routing, help for the person, agent structure), each with a short spec under `docs/specs/2026-10-19-*` and a bar in docs/evaluation.md. The earlier 0.6 (challengers), 0.7 (imports) and 0.8 (task-kind suggestion) are folded into 0.7 and 0.10.
+- A `feedback` report no longer erases `rewrite_accepted`, `model_overridden`, `score`, `cost_usd` or `model` that an earlier report gave and it leaves out, so a delayed report of its own keeps the run's model and score.
 
 ### Added
 
+- Reward measures in `feedback/v1`, additively (goal 0.6, docs/specs/2026-10-19-reward-signals-design.md): `outcome.commits`, `pr_merged`, `ci_first_push_green`, `reverted`, `item_closed`, `correction_reason`, `review_findings`, `review_findings_severe` and `person_ms`; and `context.session_id` in `enhance/v1`. The store is schema version 5 (an older file is upgraded on first use, keeping every row), `export/v1` carries them, and `import claude-code` stores a hash of each transcript's session id.
 - `serve --allowed-hosts H1,H2` (or `WHETSTONE_ALLOWED_HOSTS`): the host names accepted besides `localhost` and `127.0.0.1`, so `serve --listen` can bind a non-loopback address.
 - A `Dockerfile` and `.github/workflows/image.yml`: the image `ghcr.io/egoushka/whetstone` (linux/amd64), tagged `sha-<12 characters>` on each merge to `main` and `<Version>` on a `v*` tag. See the container section of the reference.
 

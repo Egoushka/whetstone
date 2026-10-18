@@ -34,6 +34,9 @@ public sealed record RequestRow
 
     public string? Client { get; init; }
 
+    /// <summary>The client's opaque session id; requests that share it share a session.</summary>
+    public string? SessionId { get; init; }
+
     public required bool Changed { get; init; }
 
     public string? TemplateId { get; init; }
@@ -67,6 +70,7 @@ public sealed record RequestRow
             Commit = Clean(context?.Commit),
             TaskKind = Clean(context?.TaskKind ?? response.TaskKind),
             Client = Clean(context?.Client),
+            SessionId = Clean(context?.SessionId),
             Changed = response.Changed,
             TemplateId = Clean(response.TemplateId),
             TemplateVersion = Clean(response.TemplateVersion),
@@ -128,6 +132,24 @@ public sealed record OutcomeRow
 
     public string? Effort { get; init; }
 
+    public long? Commits { get; init; }
+
+    public bool? PrMerged { get; init; }
+
+    public bool? CiFirstPushGreen { get; init; }
+
+    public bool? Reverted { get; init; }
+
+    public bool? ItemClosed { get; init; }
+
+    public string? CorrectionReason { get; init; }
+
+    public long? ReviewFindings { get; init; }
+
+    public long? ReviewFindingsSevere { get; init; }
+
+    public long? PersonMs { get; init; }
+
     public static OutcomeRow From(FeedbackRequest request, DateTimeOffset at) => new()
     {
         RequestId = request.RequestId,
@@ -146,5 +168,14 @@ public sealed record OutcomeRow
         ToolCalls = request.Outcome.ToolCalls,
         AskedAgain = request.Outcome.AskedAgain,
         Effort = RequestRow.Clean(request.Outcome.Effort),
+        Commits = request.Outcome.Commits,
+        PrMerged = request.Outcome.PrMerged,
+        CiFirstPushGreen = request.Outcome.CiFirstPushGreen,
+        Reverted = request.Outcome.Reverted,
+        ItemClosed = request.Outcome.ItemClosed,
+        CorrectionReason = request.Outcome.CorrectionReason,
+        ReviewFindings = request.Outcome.ReviewFindings,
+        ReviewFindingsSevere = request.Outcome.ReviewFindingsSevere,
+        PersonMs = request.Outcome.PersonMs,
     };
 }

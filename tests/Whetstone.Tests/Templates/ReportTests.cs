@@ -110,7 +110,7 @@ public sealed class ReportTests : IDisposable
 
         await Record("new-1", "agent/explore", Arms.Champion, At);
 
-        Assert.Equal(4L, Db.Query(file, "PRAGMA user_version")[0].Values.First());
+        Assert.Equal(5L, Db.Query(file, "PRAGMA user_version")[0].Values.First());
         Assert.Equal(["new-1", "old-1"], Db.Requests(file).Select(r => (string)r["request_id"]!).Order(StringComparer.Ordinal));
         Assert.Single(Db.Query(file, "SELECT name FROM sqlite_master WHERE name = 'templates'"));
     }

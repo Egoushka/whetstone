@@ -62,6 +62,34 @@ public sealed class StoreTests : IDisposable
     }
 
     [Fact]
+    public async Task A_delayed_report_adds_reward_measures_and_keeps_the_model_and_score_of_the_first()
+    {
+        await Store().RecordAsync(Row("add a retry to the upload client"), CancellationToken.None);
+        var first = new FeedbackOutcome(Score: 0.7, Model: "provider/model-a", Completed: true, AskedAgain: true, CorrectionReason: "incomplete", PersonMs: 95000);
+        var later = new FeedbackOutcome(Commits: 3, PrMerged: true, CiFirstPushGreen: false, Reverted: false, ItemClosed: true, ReviewFindings: 2, ReviewFindingsSevere: 0);
+
+        Assert.True(await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", first), At.AddMinutes(1)), CancellationToken.None));
+        Assert.True(await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", later), At.AddDays(2)), CancellationToken.None));
+
+        var row = Assert.Single(Db.Requests(_data.FileFor("owner")));
+        Assert.Equal((0.7, "provider/model-a", 1L, 1L), ((double)row["score"]!, (string)row["model"]!, (long)row["completed"]!, (long)row["asked_again"]!));
+        Assert.Equal(("incomplete", 95000L), ((string)row["correction_reason"]!, (long)row["person_ms"]!));
+        Assert.Equal((3L, 1L, 0L, 0L, 1L), ((long)row["commits"]!, (long)row["pr_merged"]!, (long)row["ci_first_push_green"]!, (long)row["reverted"]!, (long)row["item_closed"]!));
+        Assert.Equal((2L, 0L), ((long)row["review_findings"]!, (long)row["review_findings_severe"]!));
+    }
+
+    [Fact]
+    public async Task A_reward_measure_nobody_reported_stays_null()
+    {
+        await Store().RecordAsync(Row("p"), CancellationToken.None);
+
+        await Store().RecordOutcomeAsync(OutcomeRow.From(new FeedbackRequest("req-1", new FeedbackOutcome(Completed: true)), At.AddMinutes(1)), CancellationToken.None);
+
+        var row = Assert.Single(Db.Requests(_data.FileFor("owner")));
+        Assert.All(Db.RewardColumns, c => Assert.Null(row[c]));
+    }
+
+    [Fact]
     public async Task A_measure_nobody_reported_stays_null_not_zero()
     {
         await Store().RecordAsync(Row("p"), CancellationToken.None);
@@ -134,7 +162,7 @@ public sealed class StoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Feedback_fills_the_outcome_and_the_last_report_wins()
+    public async Task Feedback_fills_the_outcome_and_a_later_value_replaces_an_earlier_one()
     {
         var store = Store();
         await store.RecordAsync(Row("p"), CancellationToken.None);
