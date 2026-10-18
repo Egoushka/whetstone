@@ -1,0 +1,11 @@
+{
+  "name": "whetstone",
+  "owner": { "name": "Egoushka" },
+  "plugins": [
+    {
+      "name": "whetstone",
+      "source": "./clients/claude-code",
+      "description": "Sends typed prompts through whetstone (kinds, template trials, a held-out arm), shows what changed, and reports how each turn went"
+    }
+  ]
+}
