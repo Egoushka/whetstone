@@ -14,6 +14,7 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |
 | prompts typed in past sessions, imported by the owner, each with an implicit score | 0.7 | until deleted |
+| replay cases, runs and judge verdicts (ids, prompt hashes, measures; no answers) | 0.8 | until deleted, with the request |
 | prompts agents and orchestrators wrote in past sessions (subagent tasks, page-extraction questions, orchestrator turns), imported by the owner, each with the run measures the transcript recorded | 0.4 | until deleted |
 
 Nothing else: no file contents, no model answers, no other users' data.
@@ -45,6 +46,10 @@ Nothing else: no file contents, no model answers, no other users' data.
   `forget --text` removes stored rows by content. Message and session ids from the transcript are not stored.
 - **Outbound calls.** The only outbound call is to the rewriting model the user configures (goal 0.7), and only the
   redacted prompt and the chosen template are sent. Planned for goal 0.9: a recall query to the owner's own memory
-  service, nothing written back (docs/specs/2026-10-19-context-slots-design.md); for goal 0.8, replays of stored redacted
-  prompts through a gym client, which needs an amendment here first (docs/specs/2026-10-19-replay-gym-design.md).
+  service, nothing written back (docs/specs/2026-10-19-context-slots-design.md).
+- **Replays (goal 0.8, ADR 0006).** `whetstone gym run` may send a stored, redacted prompt and a template's text to the gym
+  client the owner configures (a coding-agent orchestrator pinned to the request's commit) and to the judge model the
+  owner configures. Only cases from repositories the gym client already holds are sent. The answers are not stored; the
+  store keeps the case id, a hash of the prompt, the run's measures and the judge's verdict, and `forget` removes them
+  with the request they came from.
 - **This repository holds no real prompt.** Tests and examples use invented ones.
