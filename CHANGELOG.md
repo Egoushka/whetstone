@@ -13,6 +13,7 @@ All notable changes are listed here. Format: [Keep a Changelog](https://keepacha
 ### Added
 
 - Reward measures in `feedback/v1`, additively (goal 0.6, docs/specs/2026-10-19-reward-signals-design.md): `outcome.commits`, `pr_merged`, `ci_first_push_green`, `reverted`, `item_closed`, `correction_reason`, `review_findings`, `review_findings_severe` and `person_ms`; and `context.session_id` in `enhance/v1`. The store is schema version 5 (an older file is upgraded on first use, keeping every row), `export/v1` carries them, and `import claude-code` stores a hash of each transcript's session id.
+- Correction reasons by rule: a request whose prompt reads as a correction of its session's previous request gives that request a `correction_reason` (and `asked_again` when unreported), unless the client reported one (goal 0.6, decision 2).
 - `serve --allowed-hosts H1,H2` (or `WHETSTONE_ALLOWED_HOSTS`): the host names accepted besides `localhost` and `127.0.0.1`, so `serve --listen` can bind a non-loopback address.
 - A `Dockerfile` and `.github/workflows/image.yml`: the image `ghcr.io/egoushka/whetstone` (linux/amd64), tagged `sha-<12 characters>` on each merge to `main` and `<Version>` on a `v*` tag. See the container section of the reference.
 

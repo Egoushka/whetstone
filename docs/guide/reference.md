@@ -157,6 +157,8 @@ The run measures (`completed` to `effort`) came with schema version 3 of the sto
 
 The reward measures (`commits` to `person_ms`, [the design](../specs/2026-10-19-reward-signals-design.md)) and `context.session_id` came with schema version 5. They often arrive later than the run measures, in a report of their own, so since version 5 no field of a report erases what an earlier report gave, the first five included: a later value replaces an earlier one, a missing value leaves it. `import claude-code` fills `session_id` with a hash of the transcript's session id, never the id itself.
 
+When a request with a `session_id` reads as a correction of the session's previous request, whetstone sets that request's `correction_reason`, and `asked_again` when nobody reported it, by rules over the new prompt's opening in English and Ukrainian ([Corrections.cs](../../src/Whetstone/Kinds/Corrections.cs)). A reason the client reported wins. Words such as "only", "instead" or "missing" name a reason only in a prompt that already reads as a correction ("no, only the test"), so "just run the tests" stays a new request.
+
 A score outside 0 to 1 is an error ([HttpServerTests.cs](../../tests/Whetstone.Tests/HttpServerTests.cs)).
 
 ## Schemas
