@@ -25,6 +25,8 @@ const string Usage = """
                                             stored requests of a read-only kind that a replay gym can run again (ADR 0006)
       gym run|report --challenger ID@VERSION
                                             replay a challenger against its cases and screen it (no gym client yet)
+      gym pin|test --template ID@VERSION | gym canary | gym harnesses
+                                            unit cases per template, the model-drift canary, gym clients compared
       label list [--kind K] [--limit N] | label set ID yes|no|clear
                                             the owner's hand labels: did the run complete without a re-ask
       outcomes collect --root DIR [--forge github] [--confirm]
