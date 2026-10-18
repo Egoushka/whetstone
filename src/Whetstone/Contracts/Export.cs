@@ -5,8 +5,10 @@ namespace Whetstone.Contracts;
 /// <summary>One line of <c>whetstone export</c> (schemas/export/v1): a stored call and what feedback reported for it.</summary>
 /// <param name="CreatedAt">UTC, as stored.</param>
 /// <param name="Outcome">Null until the client reports.</param>
+/// <param name="HandLabel">The owner's own verdict (<c>whetstone label</c>): the run completed without needing a re-ask. Left out when unlabelled.</param>
 public sealed record ExportRecord(
-    string RequestId, string CreatedAt, string Prompt, bool Truncated, ExportContext Context, ExportAnswer Answer, ExportOutcome? Outcome);
+    string RequestId, string CreatedAt, string Prompt, bool Truncated, ExportContext Context, ExportAnswer Answer, ExportOutcome? Outcome,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? HandLabel = null);
 
 /// <summary>A field the client did not send is left out, as the schema has no null there.</summary>
 public sealed record ExportContext(
