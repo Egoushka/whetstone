@@ -263,6 +263,7 @@ public static partial class Commands
     public const string TemplateUsage = """
         usage: whetstone template list
                whetstone template export
+               whetstone template write --kind K [--confirm]
                whetstone template add --kind K --id ID --version V --after TEXT [--before TEXT] [--source S] [--champion] [--allow-similar] [--note TEXT]
                whetstone template promote --kind K --id ID --version V [--note TEXT]
                whetstone template retire --kind K --id ID --version V [--note TEXT]
@@ -273,10 +274,12 @@ public static partial class Commands
     /// version as the kind's challenger (or champion with <c>--champion</c> when it has none), <c>promote</c> makes the challenger the
     /// champion and retires the old one, <c>retire</c> takes a version out of service. Retired rows stay, so the record does.
     /// </summary>
-    public static async Task<int> TemplateAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    public static async Task<int> TemplateAsync(
+        IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct,
+        WriterSettings? writer = null, IChallengerWriter? client = null, Func<DateTimeOffset>? clock = null)
     {
         if (options.Count == 0)
-            return Refuse(error, "a template command is list, add, promote or retire", TemplateUsage);
+            return Refuse(error, "a template command is list, export, write, add, promote or retire", TemplateUsage);
         var verb = options[0];
         var rest = options.Skip(1).ToList();
         try
@@ -292,6 +295,39 @@ public static partial class Commands
                     foreach (var row in rows.OrderBy(r => r.Template.Kind, StringComparer.Ordinal).ThenBy(r => r.CreatedAt))
                         await output.WriteAsync($"{row.Template.Kind}  {row.Template.Id} v{row.Template.Version}  {row.Role}  ({row.Template.Source}, {row.CreatedAt:yyyy-MM-dd})\n");
                     return Ok;
+                case "write":
+                    {
+                        if (!Parse(rest, ["--kind"], ["--confirm"], out var written, out var problem) || written is null)
+                            return Refuse(error, problem!, TemplateUsage);
+                        var kind = written.GetValueOrDefault("--kind", "");
+                        if (kind.Length == 0 || kind == Whetstone.Kinds.PromptKinds.Other)
+                            return Refuse(error, "--kind names the kind to write a challenger for", TemplateUsage);
+                        if (writer is null || client is null)
+                            return Refuse(error, "the writer is off; " + WriterSettings.Usage, TemplateUsage);
+                        var now = (clock ?? (() => DateTimeOffset.UtcNow))();
+                        var plan = await ChallengerWriting.PlanAsync(kind, admin, writer, now, ct);
+                        if (plan.Refusal is not null)
+                        {
+                            await error.WriteAsync($"whetstone: template: {plan.Refusal}\n");
+                            return Failed;
+                        }
+                        await output.WriteAsync(
+                            $"The writer would read {plan.ReadRequestIds.Count} runs of {kind} that ended in rework and {plan.Retired} retired texts, and send them, redacted, to {writer.Endpoint.Host} ({writer.Model}); "
+                            + $"at most ${plan.EstimatedUsd:0.0000} against ${writer.MaxUsdPerCall:0.0000} per call and ${writer.MaxUsdPerWeek:0.0000} per week.\n");
+                        if (!written.ContainsKey("--confirm"))
+                        {
+                            await output.WriteAsync("Nothing was sent. Add --confirm to send it.\n");
+                            return Ok;
+                        }
+                        var (done, usd) = await ChallengerWriting.WriteAsync(plan, admin, client, writer, now, ct);
+                        if (done is not null)
+                        {
+                            await error.WriteAsync($"whetstone: template: {done} (the call cost ${usd:0.0000})\n");
+                            return Failed;
+                        }
+                        await output.WriteAsync($"Stored a challenger for {kind} written by {writer.Model} (the call cost ${usd:0.0000}); see whetstone template list.\n");
+                        return Ok;
+                    }
                 case "export":
                     {
                         if (rest.Count > 0)

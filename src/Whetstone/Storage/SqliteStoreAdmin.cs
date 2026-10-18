@@ -309,6 +309,37 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
     private static Dictionary<string, bool>? TraitsOf(string? json) =>
         json is null ? null : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, bool>>(json);
 
+    public async Task<double> WriterSpendSinceAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return 0;
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        if (version < 10)
+            return 0;
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COALESCE(SUM(cost_usd), 0) FROM writer_spend WHERE called_at >= $since";
+        command.Parameters.AddWithValue("$since", since.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        return Convert.ToDouble(await command.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    public async Task AddWriterSpendAsync(DateTimeOffset at, string kind, string model, double usd, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            throw new InvalidOperationException("there is no store file yet");
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 10)
+            throw new InvalidOperationException("the store has no spend ledger yet; start the server once to upgrade it");
+        await using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO writer_spend (called_at, kind, model, cost_usd) VALUES ($at, $kind, $model, $usd)";
+        command.Parameters.AddWithValue("$at", at.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$model", model);
+        command.Parameters.AddWithValue("$usd", usd);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyList<(Trait Trait, bool Active)>> TraitsAsync(CancellationToken ct)
     {
         if (!File.Exists(path))

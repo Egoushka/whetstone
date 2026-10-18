@@ -12,6 +12,7 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | the outcome from `feedback`, including delayed outcomes, correction reasons, review finding counts and the person's time | 0.2 (rewards 0.6) | until deleted |
 | the text a client's model wrote in place of the prompt (a rewrite pair), redacted and cut like the prompt | 0.7 | until deleted, with the request |
 | the traits the owner defines (named paragraphs) and which were drawn on or off for each request | 0.7 | until deleted; the draws go with the request |
+| what each challenger-writer model call cost (time, kind, model, dollars; no text) | 0.7 | until deleted |
 | a search index over the stored prompt (words only, no other text) | 0.3 | until deleted; rebuilt on every `forget` |
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |
@@ -46,8 +47,10 @@ Nothing else: no file contents, no model answers, no other users' data.
   way, under the same exclusions; they often quote file contents, which is why a session left out by folder, by the paths
   its tools touched or by text keeps these out as well. `--exclude` and `--exclude-text` keep whole sessions out by folder or by content, and
   `forget --text` removes stored rows by content. Message and session ids from the transcript are not stored.
-- **Outbound calls.** The only outbound call is to the rewriting model the user configures (goal 0.7), and only the
-  redacted prompt and the chosen template are sent. Planned for goal 0.9: a recall query to the owner's own memory
+- **Outbound calls.** The only outbound call is to the model the owner configures for `whetstone template write` (goal 0.7;
+  off unless all six `WHETSTONE_WRITER_*` settings are given, and sent only with `--confirm`). It carries the champion's text,
+  the newest few stored prompts of that kind that ended in rework with the reason they were corrected, and the nearest retired
+  templates, all redacted once more before they leave; the key is read from the environment and never stored or printed. Planned for goal 0.9: a recall query to the owner's own memory
   service, nothing written back (docs/specs/2026-10-19-context-slots-design.md).
 - **Replays (goal 0.8, ADR 0006).** `whetstone gym run` may send a stored, redacted prompt and a template's text to the gym
   client the owner configures (a coding-agent orchestrator pinned to the request's commit) and to the judge model the

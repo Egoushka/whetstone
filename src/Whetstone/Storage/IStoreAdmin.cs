@@ -36,6 +36,12 @@ public interface IStoreAdmin
     /// <summary>Every stored template version with its role; empty for a file from before the template store.</summary>
     Task<IReadOnlyList<Whetstone.Templates.TemplateRow>> TemplatesAsync(CancellationToken ct);
 
+    /// <summary>What the challenger writer's model calls have cost since <paramref name="since"/>, in dollars; 0 for a file before schema 10.</summary>
+    Task<double> WriterSpendSinceAsync(DateTimeOffset since, CancellationToken ct);
+
+    /// <summary>Records one model call's cost against the weekly limit. Null-safe on a file before schema 10: it throws, as the command checks first.</summary>
+    Task AddWriterSpendAsync(DateTimeOffset at, string kind, string model, double usd, CancellationToken ct);
+
     /// <summary>Every trait with whether it is still drawn; empty for a file before schema 9.</summary>
     Task<IReadOnlyList<(Whetstone.Templates.Trait Trait, bool Active)>> TraitsAsync(CancellationToken ct);
 

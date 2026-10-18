@@ -19,7 +19,7 @@ const string Usage = """
       report                                per kind in a template trial: runs per arm, how they went, what the
                                             promotion rule says (reads only)
       trait list|add|retire                the owner's act on traits: named paragraphs drawn on or off for half a kind's requests
-      template list|add|promote|retire      the owner's act on templates: add a challenger, promote it over the champion, retire
+      template list|export|write|add|promote|retire the owner's act on templates: add a challenger, promote it over the champion, retire
                                             a version (options: whetstone template without arguments)
       gym select --kind K [--limit N] [--confirm]
                                             stored requests of a read-only kind that a replay gym can run again (ADR 0006)
@@ -102,7 +102,15 @@ switch (args)
     case ["trait", .. var traitOptions]:
         return await Commands.TraitAsync(traitOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["template", .. var templateOptions]:
-        return await Commands.TemplateAsync(templateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+        {
+            var writer = WriterSettings.From(Environment.GetEnvironmentVariable, out var writerProblem);
+            if (writerProblem is not null)
+            {
+                Console.Error.WriteLine($"whetstone: {writerProblem}");
+                return 2;
+            }
+            return await Commands.TemplateAsync(templateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token, writer, writer is null ? null : new OpenAiWriter(writer));
+        }
     case ["reindex", .. var reindexOptions]:
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:
