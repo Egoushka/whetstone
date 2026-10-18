@@ -34,14 +34,14 @@ export const register: Register = on => {
     ws ??= whetstone($)
     const client = ws
     // The previous typed prompt's answer is judged by how this one opens, whatever this one is.
-    if (last && typed(e.origin?.kind) && e.command === undefined) {
+    if (last && typed(e.origin?.kind) && e.command === undefined && !e.isMeta && !e.text.includes('<system-reminder>')) {
       const before = last
       last = undefined
       void quietly(() => client.feedback(before.enhanced.request_id, { asked_again: isCorrection(e.text) }))
     }
 
     const cwd = await $.session.cwd().catch(() => '')
-    const why = skipReason(e.text, cwd, (e.attachments?.length ?? 0) > 0, e.origin?.kind, e.command !== undefined)
+    const why = skipReason(e.text, cwd, (e.attachments?.length ?? 0) > 0, e.origin?.kind, e.command !== undefined, e.isMeta === true)
     if (why) return next(e)
     try {
       const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd, timeoutMs: 1500 }).catch(() => undefined)

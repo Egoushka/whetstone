@@ -9,6 +9,8 @@ test('prompts that never reach whetstone', () => {
   expect(skipReason(long, '/p', true, 'composer', false)).toBe('has attachments')
   expect(skipReason(long, '/p', false, 'peer', false)).toBe('not typed by the user')
   expect(skipReason(long, '/p', false, 'composer', true)).toBe('slash command')
+  expect(skipReason('<system-reminder>\nLinked sessions now' + long, '/p', false, 'composer', false)).toBe('not typed by the user')
+  expect(skipReason(long, '/p', false, 'composer', false, true)).toBe('not typed by the user')
   expect(skipReason(long, '/home/dev/Projects/work/app', false, 'composer', false)).toBe('employer work')
   expect(skipReason('use this token abc please for the thing ' + long, '/p', false, 'composer', false)).toBe('may hold a credential')
   expect(skipReason('<pasted_content id="a">' + long + '</pasted_content>', '/p', false, 'composer', false)).toBe('long or pasted')
