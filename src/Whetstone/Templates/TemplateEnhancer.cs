@@ -57,17 +57,28 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
                 : (Arms.Assign(kind, answer.RequestId, found.Challenger is not null), 0);
             var chosen = arm switch { Arms.Champion => found.Champion, Arms.Challenger => found.Challengers[index], _ => null };
             var held = answer with { HeldOut = arm == Arms.HeldOut, TaskKind = kind, Arm = arm };
+            Dictionary<string, bool>? drawn = null;
+            if (chosen is not null && found.Traits.Count > 0)
+            {
+                // Held-out requests get no trait. The rest draw each trait alone, so a trait's effect is independent of the arm.
+                drawn = found.Traits.ToDictionary(t => t.Id, t => t.On(answer.RequestId), StringComparer.Ordinal);
+                var added = found.Traits.Where(t => drawn[t.Id]).Select(t => t.Text).ToList();
+                if (added.Count > 0)
+                    chosen = chosen with { After = string.Join("\n\n", new[] { chosen.After }.Concat(added).Where(t => t.Length > 0)) };
+            }
             // The filler stripper is the one source that changes the original, by deleting listed phrases; the answer names them.
             var (stripped, removed) = chosen?.Source == TemplateSources.FillerStrip ? FillerStripper.Strip(answer.Prompt) : (answer.Prompt, []);
             if (chosen is null || chosen.Render(stripped, request.Context) is not { } prompt)
                 return held;
             return held with
             {
+                Traits = drawn,
                 Prompt = prompt,
                 Changed = prompt != answer.Prompt,
                 TemplateId = chosen.Id,
                 TemplateVersion = chosen.Version,
-                Reason = $"template: {chosen.Id} v{chosen.Version} ({arm})" + (removed.Count > 0 ? "; removed: " + string.Join(", ", removed) : ""),
+                Reason = $"template: {chosen.Id} v{chosen.Version} ({arm})" + (removed.Count > 0 ? "; removed: " + string.Join(", ", removed) : "")
+                    + (drawn?.Where(t => t.Value).Select(t => t.Key).ToList() is { Count: > 0 } on ? "; traits: " + string.Join(", ", on) : ""),
             };
         }
         catch (Exception)

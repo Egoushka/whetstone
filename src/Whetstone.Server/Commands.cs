@@ -384,6 +384,61 @@ public static partial class Commands
     [GeneratedRegex(@"^[A-Za-z0-9._-]{1,64}$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex NamePattern();
 
+    public const string TraitUsage = """
+        usage: whetstone trait list
+               whetstone trait add --kind K --id ID --text TEXT
+               whetstone trait retire --kind K --id ID
+        """;
+
+    /// <summary>
+    /// The owner's act on traits (evidence volume, decision 2): <c>add</c> gives a kind a named paragraph that is drawn on or off for half
+    /// its requests, <c>retire</c> stops drawing it. A trait that wins is made part of the champion by a new template version.
+    /// </summary>
+    public static async Task<int> TraitAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count == 0 || options[0] is not ("list" or "add" or "retire"))
+            return Refuse(error, "a trait command is list, add or retire", TraitUsage);
+        var verb = options[0];
+        try
+        {
+            if (verb == "list")
+            {
+                if (options.Count > 1)
+                    return Refuse(error, $"unknown option '{options[1]}'", TraitUsage);
+                var traits = await admin.TraitsAsync(ct);
+                if (traits.Count == 0)
+                    await output.WriteAsync("No traits are stored.\n");
+                foreach (var (stored, active) in traits)
+                    await output.WriteAsync($"{stored.Kind}  {stored.Id}  {(active ? "active" : "retired")}  {stored.Text.ReplaceLineEndings(" ")}\n");
+                return Ok;
+            }
+            if (!Parse([.. options.Skip(1)], verb == "add" ? ["--kind", "--id", "--text"] : ["--kind", "--id"], [], out var parsed, out var problem) || parsed is null)
+                return Refuse(error, problem!, TraitUsage);
+            var (kind, id) = (parsed.GetValueOrDefault("--kind", ""), parsed.GetValueOrDefault("--id", ""));
+            if (kind.Length == 0 || id.Length == 0)
+                return Refuse(error, "--kind and --id are both needed", TraitUsage);
+            if (kind == Whetstone.Kinds.PromptKinds.Other)
+                return Refuse(error, "kind 'other' is never templated", TraitUsage);
+            if (!NamePattern().IsMatch(id))
+                return Refuse(error, "--id is 1 to 64 characters of letters, digits, '.', '_' and '-'", TraitUsage);
+            if (verb == "retire")
+                return Report(await admin.RetireTraitAsync(kind, id, ct), $"Trait {id} is no longer drawn for {kind}.", output, error);
+            var text = parsed.GetValueOrDefault("--text", "");
+            if (text.Length == 0)
+                return Refuse(error, "--text is needed", TraitUsage);
+            var probe = new Template(id, "1", kind, "", text, "hand");
+            if (probe.UnknownSlots().ToList() is { Count: > 0 } unknown)
+                return Refuse(error, $"unknown slot {{{{{unknown[0]}}}}}; whetstone fills repository, commit and task_kind", TraitUsage);
+            if (probe.Render("x", null) is null)
+                return Refuse(error, "the trait cannot be rendered", TraitUsage);
+            return Report(await admin.AddTraitAsync(new Trait(id, kind, text), ct), $"Trait {id} added for {kind}; half its requests will get it.", output, error);
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "trait", e);
+        }
+    }
+
     public const string ReportUsage = "usage: whetstone report";
 
     /// <summary>
@@ -413,7 +468,8 @@ public static partial class Commands
                 .Union(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
             var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None), settings.PersonTimeKinds)).ToList();
             var tracked = reports.Sum(r => r.Runs.Values.Sum());
-            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked, HandLabels.Of(records, settings.Weights)));
+            var traits = Trials.TraitEffects(runs.ToDictionary(k => k.Key, k => (IReadOnlyList<TrialRun>)k.Value, StringComparer.Ordinal));
+            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked, HandLabels.Of(records, settings.Weights), traits));
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)

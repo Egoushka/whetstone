@@ -46,7 +46,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
                    rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
-                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}
+                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}, {(version >= 9 ? "traits" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -57,7 +57,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             yield return new ExportRecord(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3) != 0,
                 new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7), Text(reader, 29)),
-                new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18), Text(reader, 28)),
+                new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18), Text(reader, 28), TraitsOf(Text(reader, 41))),
                 reported is null
                     ? null
                     : new ExportOutcome(Flag(reader, 12), Flag(reader, 13), Number(reader, 14), Number(reader, 15), Text(reader, 16), reported,
@@ -304,6 +304,79 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                 new Template(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)),
                 reader.GetString(6), DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)));
         return found;
+    }
+
+    private static Dictionary<string, bool>? TraitsOf(string? json) =>
+        json is null ? null : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, bool>>(json);
+
+    public async Task<IReadOnlyList<(Trait Trait, bool Active)>> TraitsAsync(CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return [];
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadOnly, ct);
+        await using var _ = connection;
+        if (version < 9)
+            return [];
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT trait_id, kind, text, active FROM traits ORDER BY kind, trait_id";
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var found = new List<(Trait, bool)>();
+        while (await reader.ReadAsync(ct))
+            found.Add((new Trait(reader.GetString(0), reader.GetString(1), reader.GetString(2)), reader.GetInt64(3) != 0));
+        return found;
+    }
+
+    public async Task<string?> AddTraitAsync(Trait trait, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 9)
+            return "the store has no trait table yet; start the server once to upgrade it";
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+        await using (var exists = connection.CreateCommand())
+        {
+            exists.Transaction = transaction;
+            exists.CommandText = "SELECT active FROM traits WHERE kind = $kind AND trait_id = $id";
+            exists.Parameters.AddWithValue("$kind", trait.Kind);
+            exists.Parameters.AddWithValue("$id", trait.Id);
+            if (await exists.ExecuteScalarAsync(ct) is not null)
+                return $"trait {trait.Id} already exists for {trait.Kind}; give changed text a new id";
+        }
+        await using (var count = connection.CreateCommand())
+        {
+            count.Transaction = transaction;
+            count.CommandText = "SELECT COUNT(*) FROM traits WHERE kind = $kind AND active = 1";
+            count.Parameters.AddWithValue("$kind", trait.Kind);
+            if (Convert.ToInt64(await count.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture) >= Trait.MaxPerKind)
+                return $"{trait.Kind} already has {Trait.MaxPerKind} traits; retire one first";
+        }
+        await using var insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText = "INSERT INTO traits (trait_id, kind, text, active, created_at) VALUES ($id, $kind, $text, 1, $at)";
+        insert.Parameters.AddWithValue("$id", trait.Id);
+        insert.Parameters.AddWithValue("$kind", trait.Kind);
+        insert.Parameters.AddWithValue("$text", trait.Text);
+        insert.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        await insert.ExecuteNonQueryAsync(ct);
+        await transaction.CommitAsync(ct);
+        return null;
+    }
+
+    public async Task<string?> RetireTraitAsync(string kind, string id, CancellationToken ct)
+    {
+        if (!File.Exists(path))
+            return "there is no store file yet";
+        var (connection, version) = await OpenAsync(SqliteOpenMode.ReadWrite, ct);
+        await using var _ = connection;
+        if (version < 9)
+            return "the store has no trait table yet; start the server once to upgrade it";
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE traits SET active = 0 WHERE kind = $kind AND trait_id = $id AND active = 1";
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$id", id);
+        return await command.ExecuteNonQueryAsync(ct) > 0 ? null : $"no active trait {id} for {kind}";
     }
 
     public async Task<IReadOnlyList<(string Kind, string TemplateId, string Version, LibraryDecision Decision)>> TemplateDecisionsAsync(CancellationToken ct)

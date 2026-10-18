@@ -37,4 +37,8 @@ public sealed record EnhanceResponse(
     /// <summary>Which arm this answer was (<c>champion</c>, <c>challenger</c>, <c>held_out</c>); kept in the store, not sent to the client.</summary>
     [JsonIgnore]
     public string? Arm { get; init; }
+
+    /// <summary>The traits drawn for this answer, on or off by trait id (goal 0.7, decision 2); kept in the store, not sent to the client.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, bool>? Traits { get; init; }
 }

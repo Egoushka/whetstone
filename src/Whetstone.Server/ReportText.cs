@@ -7,7 +7,7 @@ namespace Whetstone.Server;
 /// <summary>The text of <c>whetstone report</c>: per kind, who got what and what the promotion rule says.</summary>
 internal static class ReportText
 {
-    public static string Format(IReadOnlyList<KindReport> kinds, int untracked, HandLabels? labels = null)
+    public static string Format(IReadOnlyList<KindReport> kinds, int untracked, HandLabels? labels = null, IReadOnlyList<TraitReport>? traits = null)
     {
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $"{kinds.Count} kinds in template trials; {untracked} stored requests are in none.\n");
@@ -49,6 +49,13 @@ internal static class ReportText
         if (labels is { } l)
             text.Append(CultureInfo.InvariantCulture, $"\nhand labels: {l.Labelled} labelled, {l.Compared} with a reported completion; the proxy (completed, no rework) agrees on {Percent(l.Agree, l.Compared)}")
                 .Append(l.Trusted ? "; enough to trust the proxy.\n" : $"; label at least {HandLabels.Needed} with {HandLabels.Bar * 100:0}% agreement before trusting it (whetstone label).\n");
+        if (traits is { Count: > 0 })
+        {
+            text.Append("\ntraits (pooled over the kinds that carry each; a trait is drawn on or off for half the requests):\n");
+            foreach (var t in traits)
+                text.Append(CultureInfo.InvariantCulture, $"  {t.Trait}: on {Percent(t.OnWins, t.OnRuns)}, off {Percent(t.OffWins, t.OffRuns)}, z {t.Z:0.0}; {t.Verdict}\n")
+                    .Append("    by kind: ").Append(string.Join(", ", t.Kinds.Select(k => $"{k.Kind} {k.On} on / {k.Off} off"))).Append('\n');
+        }
         text.Append("\nThe report decides nothing: a verdict is applied by the owner.\n");
         return text.ToString();
     }
