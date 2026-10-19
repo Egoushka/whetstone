@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { isCorrection, repositoryOf, skipReason } from './policy'
+import { isCorrection, levelOf, repositoryOf, skipReason } from './policy'
 
 const long = 'Implement retry with backoff in the upload client for the example service'
 
@@ -29,4 +29,11 @@ test('the repository comes from the remote URL', () => {
   expect(repositoryOf('https://github.com/Example/app.git\n')).toBe('Example/app')
   expect(repositoryOf('git@github.com:Example/app.git')).toBe('Example/app')
   expect(repositoryOf('')).toBeUndefined()
+})
+
+test('a price level prefix is read and removed', () => {
+  expect(levelOf('*cheap rename the field')).toEqual({ level: 'cheap', text: 'rename the field' })
+  expect(levelOf('*max   rename the field')).toEqual({ level: 'best', text: 'rename the field' })
+  expect(levelOf('*maximum effort please')).toEqual({ text: '*maximum effort please' })
+  expect(levelOf('rename the *cheap field')).toEqual({ text: 'rename the *cheap field' })
 })

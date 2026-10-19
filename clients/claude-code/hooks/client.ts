@@ -24,6 +24,19 @@ export type Outcome = {
   duration_ms?: number
   asked_again?: boolean
   model?: string
+  person_ms?: number
+  read_ms?: number
+}
+
+export type Level = 'cheap' | 'middle' | 'best'
+
+export type Context = {
+  repository?: string
+  client: string
+  session_id?: string
+  level?: Level
+  hints?: Record<string, string>
+  parent_request_id?: string
 }
 
 type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ status: number; ok: boolean; headers: Record<string, string>; text: string }>
@@ -97,7 +110,7 @@ export function whetstone(host: Host, url = URL) {
   }
 
   return {
-    enhance: (prompt: string, context: { repository?: string; client: string; session_id?: string }, deadlineMs: number) =>
+    enhance: (prompt: string, context: Context, deadlineMs: number) =>
       call('enhance', { prompt, context, deadline_ms: deadlineMs }) as Promise<Enhanced>,
     feedback: (requestId: string, outcome: Outcome) => call('feedback', { request_id: requestId, outcome }),
   }

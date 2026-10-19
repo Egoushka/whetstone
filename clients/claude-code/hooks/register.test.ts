@@ -123,3 +123,81 @@ test('a prompt too long for the expander is sent as typed', async ($, on) => {
   expect(seen).toBe(ask)
   expect(asked).toBe(false)
 })
+
+test('*cheap and *max choose a level and are stripped, even when whetstone is down', async ($, on) => {
+  mock.store(on)
+  mock.clock(on)
+  const calls: Call[] = []
+  fakeWhetstone(on, champion, calls)
+  on('ui.log', async () => ({ value: undefined }))
+  const seen: string[] = []
+  on('prompt.submit', async (_$, e) => (seen.push(e.text), { text: e.text }))
+  await $.prompt.submit({ text: '*cheap ' + PROMPT })
+  await $.prompt.submit({ text: '*MAX ' + PROMPT })
+  await $.prompt.submit({ text: '*cheap fix it' })
+  expect(seen).toEqual([champion.prompt, champion.prompt, 'fix it'])
+  const enhance = calls.filter(c => c.name === 'enhance').map(c => [c.arguments.prompt, c.arguments.context.level])
+  expect(enhance).toEqual([[PROMPT, 'cheap'], [PROMPT, 'best']])
+})
+
+test('person time is the pause before a prompt; a correction adds its pause to the request before; an output is read for the pause', async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const calls: Call[] = []
+  fakeWhetstone(on, { ...champion, task_kind: 'output/handoff' }, calls)
+  on('ui.log', async () => ({ value: undefined }))
+  on('prompt.submit', async (_$, e) => ({ text: e.text }))
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  const finish = async (turnId: string) => {
+    await $.turn.start({ text: PROMPT, turnId })
+    await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId, usage })
+  }
+  await $.prompt.submit({ text: PROMPT })
+  await finish('t1')
+  await clock.advance(45_000)
+  await $.prompt.submit({ text: PROMPT })
+  await finish('t2')
+  await clock.advance(30_000)
+  await $.prompt.submit({ text: 'No, I meant the other one' })
+  await new Promise(r => setTimeout(r, 20))
+  const fb = calls.filter(c => c.name === 'feedback').map(c => c.arguments.outcome)
+  const completed = fb.filter(o => o.completed)
+  expect(completed[0].person_ms).toBeUndefined()
+  expect(completed[1]).toMatchObject({ person_ms: 45_000 })
+  expect(fb).toContainEqual({ asked_again: false, read_ms: 45_000 })
+  expect(fb).toContainEqual({ asked_again: true, person_ms: 75_000, read_ms: 30_000 })
+})
+
+test('a subagent prompt is a request of its own, linked to the prompt that started it', async ($, on) => {
+  mock.store(on)
+  mock.clock(on)
+  const calls: Call[] = []
+  const child = { ...champion, prompt: 'Look at the retry loop in ingest.py and report the sleep values, nothing else.', changed: false, template_id: null, template_version: null, task_kind: 'agent/explore', request_id: 'c1' }
+  let reply: object = champion
+  on('process.run', async (_$: any, e: any) => ({ value: { exitCode: 0, stdout: e.argv[0] === 'security' ? 'k\n' : 'https://github.com/Example/app.git\n', stderr: '' } }))
+  on('session.cwd', async () => ({ value: '/home/dev/Projects/personal/app' }))
+  on('http.fetch', async (_$: any, e: any) => {
+    const body = JSON.parse(e.init?.body ?? e.body ?? '{}')
+    const json = (result: object) => ({ value: { status: 200, ok: true, headers: { 'mcp-session-id': 's1' }, text: JSON.stringify({ jsonrpc: '2.0', id: body.id, result }) } })
+    if (body.method === 'initialize') return json({})
+    if (body.method === 'tools/call') {
+      calls.push(body.params)
+      return json({ structuredContent: body.params.name === 'enhance' ? reply : {} })
+    }
+    return { value: { status: 202, ok: true, headers: {}, text: '' } }
+  })
+  on('ui.log', async () => ({ value: undefined }))
+  on('prompt.submit', async (_$, e) => ({ text: e.text }))
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('agent.spawn', async () => ({ model: 'm', agentId: 'a1' }))
+  await $.prompt.submit({ text: PROMPT })
+  await $.turn.start({ text: PROMPT, turnId: 't1' })
+  reply = child
+  await $.agent.spawn({ prompt: child.prompt, description: 'read', subagentType: 'Explore' })
+  const enhances = calls.filter(c => c.name === 'enhance')
+  expect(enhances[1]!.arguments.context.parent_request_id).toBe('r1')
+  await $.turn.complete({ answer: 'ok', durationMs: 5, isAborted: false, turnId: 'a1-t', agentId: 'a1', usage })
+  expect(calls.find(c => c.name === 'feedback' && c.arguments.request_id === 'c1')?.arguments.outcome).toMatchObject({ completed: true, duration_ms: 5 })
+})
