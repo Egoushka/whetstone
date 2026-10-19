@@ -1,5 +1,8 @@
 # Price levels and routing evidence (goal 0.10)
 
+Status: built 2026-10-19 (decisions 1 to 3). A level's champion is a template stored under the kind `<kind>@<level>`, so its
+trial and evidence are its own without a new table. Decision 4 is a follow-up outside whetstone.
+
 A kind's best prompt for an expensive model is not always its best for a cheap one, and the evidence whetstone keeps per
 model can tell the owner which model and effort a kind needs. This goal replaces the earlier "it suggests the task kind".
 

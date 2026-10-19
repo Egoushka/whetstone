@@ -81,7 +81,10 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates, IMem
             return answer;
         try
         {
+            // A level the client chose has its own champion when one is stored under "<kind>@<level>"; its runs are then that kind's.
             var found = await templates.ForKindAsync(kind, ct);
+            if (request.Context?.Level is { Length: > 0 } level && await templates.ForKindAsync($"{kind}@{level}", ct) is { Champion: not null } leveled)
+                (kind, found) = ($"{kind}@{level}", leveled);
             var (arm, index) = found.Champion is null ? (Arms.HeldOut, -1)
                 : found.Challengers.Count >= 2 ? Arms.Assign(kind, answer.RequestId, await SharesAsync(kind, found, ct))
                 : (Arms.Assign(kind, answer.RequestId, found.Challenger is not null), 0);

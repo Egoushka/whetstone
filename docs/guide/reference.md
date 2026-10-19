@@ -78,6 +78,10 @@ A template may use `{{hint_<name>}}`, filled from `context.hints` (for example t
 
 With `context.ablation` set, `report` ends with an ablations section: per held-out rule or skill version, sessions, runs, completion and rework beside sessions that held nothing out, and "a removal candidate" when after 100 sessions completion and rework differ by less than 5 points. The client applies the ablation; whetstone only compares.
 
+### Levels and routing (goal 0.10)
+
+A request with `context.level` is served by the champion stored for `<kind>@<level>` when there is one (add it with `whetstone template add --kind agent/explore@cheap ...`), and is stored under that kind, so each level runs its own trial; with no such champion the kind's own templates serve it. `whetstone report --routing` prints, per kind (levels folded together), each model's counted runs, completion, rework and median cost, marks the best completion, and names the cheapest model whose completion is shown no worse than the best's by 15 points (z 2.2, 30 runs each) as a routing candidate. `report --effort` does the same per effort. They suggest; routing changes by the owner's hand in the gateway's configuration, outside whetstone.
+
 ### gym
 
 `whetstone gym select --kind K [--limit N] [--confirm]` picks stored requests the replay gym may run again ([ADR 0006](../adr/0006-replay-gym-screens-challengers.md)): of a read-only kind (`agent/explore`, `agent/plan`, `agent/claude-code-guide`, `agent/box-reader`, `agent/general-purpose/explore`, `agent/general-purpose/research`), with a repository and a commit, not about live state (CI, pull requests, deploys, logs, "today"), and with no redaction marker. Newest first, 30 by default. It prints why the others were left out and counts until `--confirm`; then it stores each as a case: the request id, repository, commit, kind and a hash of the prompt, never a copy. A request already a case is not picked again.
@@ -145,6 +149,7 @@ The arguments are the `request` part of [enhance.schema.json](../../schemas/enha
 | `context.client` | string | Optional |
 | `context.session_id` | string | Optional; 1 to 128 characters, opaque; requests that share it share a session |
 | `context.hints` | object | Optional; up to 10 names (`a-z`, `0-9`, `_`) to strings of at most 500 characters; fill `{{hint_<name>}}` slots; not stored |
+| `context.level` | `cheap`, `middle` or `best` | Optional; the price level the client chose; a kind's champion stored under `<kind>@<level>` serves it |
 | `context.ablation` | string | Optional; what the client held out for the session (`rule:<id>`, `skill:<name>@<version>`); stored and compared in `report` |
 | `deadline_ms` | integer | 50 to 30000; default 1500 |
 
