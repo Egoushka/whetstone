@@ -169,7 +169,7 @@ public static partial class Commands
                 return Ok;
             }
             if (runner is null)
-                return Refuse(error, "no gym client is configured: the chargehand runner is not built yet (ADR 0006)", GymUsage);
+                return Refuse(error, "no gym client is configured; " + GymSettings.Usage, GymUsage);
             var unit = cases.Where(c => c.Pinned && c.TaskKind == template.Kind).ToList();
             var mine = runs.Where(r => r.TemplateId == template.Id && r.TemplateVersion == template.Version).ToList();
             var prompts = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -230,7 +230,7 @@ public static partial class Commands
                 return Ok;
             }
             if (runner is null)
-                return Refuse(error, "no gym client is configured: the chargehand runner is not built yet (ADR 0006)", GymUsage);
+                return Refuse(error, "no gym client is configured; " + GymSettings.Usage, GymUsage);
             var template = (await admin.TemplatesAsync(ct)).Select(t => t.Template).FirstOrDefault(t => t.Id == id && t.Version == version);
             if (template is null)
                 return Refuse(error, $"no stored template {id} v{version}", GymUsage);
