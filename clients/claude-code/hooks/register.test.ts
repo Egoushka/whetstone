@@ -90,3 +90,36 @@ test('the model rewrite challenger runs the rewriter and a valid edit is sent', 
   await $.prompt.submit({ text: ask })
   expect(seen).toBe(edited)
 })
+
+test('the expander keeps a terse prompt as typed and adds a brief under it, and advice is shown', async ($, on) => {
+  mock.store(on)
+  mock.clock(on)
+  const calls: Call[] = []
+  const ask = 'fix the flaky upload test in tests/upload.spec.ts'
+  const brief = 'Goal: make tests/upload.spec.ts pass reliably.\nStop when it passes ten runs in a row and report what changed.'
+  fakeWhetstone(on, { prompt: ask, changed: false, template_id: 'typed-expand', template_version: 'e1', reason: 'template', task_kind: 'typed/debug', request_id: 'r3', held_out: false, advice: 'typed/debug: 30% of the last 40 runs needed rework.' }, calls)
+  on('model.complete', async () => ({ value: { isAnswered: true as const, text: JSON.stringify({ changed: true, text: brief, reason: 'spelled out the stop rule' }), usage } }))
+  const logged: string[] = []
+  on('ui.log', async (_$, e) => (logged.push(JSON.stringify(e)), { value: undefined }))
+  let seen = ''
+  on('prompt.submit', async (_$, e) => ((seen = e.text), { text: e.text }))
+  await $.prompt.submit({ text: ask })
+  expect(seen).toBe(`${ask}\n\n${brief}`)
+  expect(logged.join('\n')).toContain('needed rework')
+})
+
+test('a prompt too long for the expander is sent as typed', async ($, on) => {
+  mock.store(on)
+  mock.clock(on)
+  const calls: Call[] = []
+  const ask = 'Refactor the upload client so retries back off exponentially, keep the public API the same, and update the three call sites in the worker'
+  fakeWhetstone(on, { prompt: ask, changed: false, template_id: 'typed-expand', template_version: 'e1', reason: 'template', task_kind: 'typed/implement', request_id: 'r4', held_out: false }, calls)
+  let asked = false
+  on('model.complete', async () => ((asked = true), { value: { isAnswered: true as const, text: '{}', usage } }))
+  on('ui.log', async () => ({ value: undefined }))
+  let seen = ''
+  on('prompt.submit', async (_$, e) => ((seen = e.text), { text: e.text }))
+  await $.prompt.submit({ text: ask })
+  expect(seen).toBe(ask)
+  expect(asked).toBe(false)
+})

@@ -82,6 +82,16 @@ With `context.ablation` set, `report` ends with an ablations section: per held-o
 
 A request with `context.level` is served by the champion stored for `<kind>@<level>` when there is one (add it with `whetstone template add --kind agent/explore@cheap ...`), and is stored under that kind, so each level runs its own trial; with no such champion the kind's own templates serve it. `whetstone report --routing` prints, per kind (levels folded together), each model's counted runs, completion, rework and median cost, marks the best completion, and names the cheapest model whose completion is shown no worse than the best's by 15 points (z 2.2, 30 runs each) as a routing candidate. `report --effort` does the same per effort. They suggest; routing changes by the owner's hand in the gateway's configuration, outside whetstone.
 
+### For the person (goal 0.11)
+
+Every `enhance` answer for a kind with at least 30 measured runs may carry `advice`: how many of the kind's last 200 runs needed rework and the most common reason, for the client to show before the prompt goes out (the Claude Code mod logs it). It never blocks or delays the answer; it is read at most every ten minutes per kind.
+
+The shorthand expander is a model challenger, `typed-expand` version `e1`: the mod sends a typed prompt of at most 100 characters to a small model that writes a brief of at most four lines from what the prompt already says, and sends the prompt unchanged with the brief under it. It is not seeded; to try it on a typed kind, `whetstone template add --kind typed/debug --id typed-expand --version e1 --source model` (a model template needs no text).
+
+`whetstone report --person` prints the last four ISO weeks of typed requests: your time in minutes (from `person_ms`), the three kinds that took most of it, and rework by reason.
+
+State-aware templates (the spec's decision 4) are not built: they wait for the owner's privacy decision.
+
 ### gym
 
 `whetstone gym select --kind K [--limit N] [--confirm]` picks stored requests the replay gym may run again ([ADR 0006](../adr/0006-replay-gym-screens-challengers.md)): of a read-only kind (`agent/explore`, `agent/plan`, `agent/claude-code-guide`, `agent/box-reader`, `agent/general-purpose/explore`, `agent/general-purpose/research`), with a repository and a commit, not about live state (CI, pull requests, deploys, logs, "today"), and with no redaction marker. Newest first, 30 by default. It prints why the others were left out and counts until `--confirm`; then it stores each as a case: the request id, repository, commit, kind and a hash of the prompt, never a copy. A request already a case is not picked again.

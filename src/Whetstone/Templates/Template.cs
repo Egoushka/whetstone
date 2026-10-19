@@ -107,6 +107,17 @@ public sealed partial record Template(string Id, string Version, string Kind, st
     }
 }
 
+/// <summary>A kind's recent record for the pre-send coach.</summary>
+public sealed record KindAdvice(int Runs, int Rework, string? TopReason)
+{
+    /// <summary>Runs a kind needs before it gets advice: fewer say nothing worth showing.</summary>
+    public const int MinRuns = 30;
+
+    /// <summary>The line the client may show, or null when the kind has too few runs.</summary>
+    public string? Text(string kind) => Runs < MinRuns ? null
+        : $"{kind}: {100 * Rework / Runs}% of the last {Runs} runs needed rework" + (TopReason is { } r && Rework > 0 ? $", most often '{r}'." : ".");
+}
+
 /// <summary>The templates a kind has now: at most one champion and up to <see cref="MaxChallengers"/> challengers.</summary>
 public sealed record KindTemplates(Template? Champion, IReadOnlyList<Template> Challengers)
 {
@@ -161,6 +172,12 @@ public interface ITemplates
     /// </summary>
     Task<IReadOnlyDictionary<string, Tally>> TalliesAsync(string kind, CancellationToken ct) =>
         Task.FromResult<IReadOnlyDictionary<string, Tally>>(new Dictionary<string, Tally>());
+
+    /// <summary>
+    /// How a kind's latest measured runs went, for the pre-send coach (goal 0.11): runs, those reworked, and the most common correction
+    /// reason. Null when the store cannot say.
+    /// </summary>
+    Task<KindAdvice?> AdviceAsync(string kind, CancellationToken ct) => Task.FromResult<KindAdvice?>(null);
 
     /// <summary>Stores versions that are not there yet; a version already stored is left as it is, role included.</summary>
     Task SeedAsync(IReadOnlyList<Template> templates, string role, CancellationToken ct);

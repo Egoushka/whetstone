@@ -449,8 +449,8 @@ public static partial class Commands
                         if (!Identity(add!, out var kind, out var id, out var version, out problem))
                             return Refuse(error, problem!, TemplateUsage);
                         var template = new Template(id, version, kind, add!.GetValueOrDefault("--before", ""), add!.GetValueOrDefault("--after", ""), add!.GetValueOrDefault("--source", "hand"));
-                        if (template.Before.Length == 0 && template.After.Length == 0 && template.Source != TemplateSources.FillerStrip)
-                            return Refuse(error, "a template needs --before or --after text (only --source filler-strip may have none)", TemplateUsage);
+                        if (template.Before.Length == 0 && template.After.Length == 0 && template.Source is not (TemplateSources.FillerStrip or TemplateSources.Model))
+                            return Refuse(error, "a template needs --before or --after text (only --source filler-strip or model may have none)", TemplateUsage);
                         if (template.UnknownSlots().ToList() is { Count: > 0 } unknown)
                             return Refuse(error, $"unknown slot {{{{{unknown[0]}}}}}; whetstone fills repository, commit and task_kind", TemplateUsage);
                         if (template.Render("x", null) is null)
@@ -574,7 +574,7 @@ public static partial class Commands
         }
     }
 
-    public const string ReportUsage = "usage: whetstone report [--routing | --effort]";
+    public const string ReportUsage = "usage: whetstone report [--routing | --effort | --person]";
 
     /// <summary>
     /// Reads your store and prints, per kind of prompt in a template trial, the runs each arm got, how they went and what the
@@ -584,10 +584,10 @@ public static partial class Commands
         IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct, TrialSettings? settings = null)
     {
         settings ??= TrialSettings.Default;
-        if (!Parse(options, [], ["--routing", "--effort"], out var reportParsed, out var problem))
+        if (!Parse(options, [], ["--routing", "--effort", "--person"], out var reportParsed, out var problem))
             return Refuse(error, problem!, ReportUsage);
         if (reportParsed!.Count > 1)
-            return Refuse(error, "--routing and --effort are one report each", ReportUsage);
+            return Refuse(error, "--routing, --effort and --person are one report each", ReportUsage);
         if (reportParsed.Count == 1)
         {
             try
@@ -595,6 +595,11 @@ public static partial class Commands
                 var all = new List<ExportRecord>();
                 await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
                     all.Add(record);
+                if (reportParsed.ContainsKey("--person"))
+                {
+                    await output.WriteAsync(PersonWeeks.Format(all, settings.Weights, 4));
+                    return Ok;
+                }
                 var routing = reportParsed.ContainsKey("--routing");
                 await output.WriteAsync(Routing.Format(Routing.Of(all, settings.Weights, routing ? r => r.Outcome?.Model : r => r.Outcome?.Effort), routing ? "model" : "effort"));
                 return Ok;

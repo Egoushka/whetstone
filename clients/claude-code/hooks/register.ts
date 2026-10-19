@@ -1,5 +1,5 @@
 import type { Register } from 'claude-code'
-import { RULES, TEMPLATE_ID, VERSION, accept } from './rewrite'
+import { EXPAND_ID, EXPAND_MAX_CHARS, EXPAND_RULES, EXPAND_VERSION, RULES, TEMPLATE_ID, VERSION, accept, acceptExpansion } from './rewrite'
 import { whetstone, type Enhanced } from './client'
 import { isCorrection, repositoryOf, skipReason } from './policy'
 
@@ -62,7 +62,18 @@ export const register: Register = on => {
           text = edit.text
           note = `rewrite ${VERSION}: ${edit.reason}`
         }
+      } else if (enhanced.template_id === EXPAND_ID) {
+        text = e.text
+        if (e.text.trim().length <= EXPAND_MAX_CHARS) {
+          const r = await $.model.complete({ model: 'haiku', system: EXPAND_RULES, prompt: e.text, maxTokens: 400, effort: 'low', timeoutMs: 8000 })
+          const edit = r.isAnswered ? acceptExpansion(e.text, r.text) : undefined
+          if (edit) {
+            text = edit.text
+            note = `expand ${EXPAND_VERSION}: ${edit.reason}`
+          }
+        }
       }
+      if (enhanced.advice) $.ui.log(`whetstone: ${enhanced.advice}`)
       if (enhanced.task_kind) last = { enhanced, text }
       if (text !== e.text) {
         const ts = Date.now()

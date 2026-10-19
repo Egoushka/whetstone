@@ -25,6 +25,30 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates, IMem
 
     private readonly ConcurrentDictionary<string, (DateTimeOffset Until, double[] Shares)> _shares = new(StringComparer.Ordinal);
 
+    /// <summary>How long a kind's advice stands before the store is asked again.</summary>
+    private static readonly TimeSpan AdviceLife = TimeSpan.FromMinutes(10);
+
+    private readonly ConcurrentDictionary<string, (DateTimeOffset Until, string? Text)> _advice = new(StringComparer.Ordinal);
+
+    /// <summary>The pre-send coach's line for a kind (goal 0.11), read at most every ten minutes; null on any failure or too few runs.</summary>
+    private async Task<string?> AdviceAsync(string kind, CancellationToken ct)
+    {
+        var now = TimeProvider.System.GetUtcNow();
+        if (_advice.TryGetValue(kind, out var cached) && cached.Until > now)
+            return cached.Text;
+        string? text = null;
+        try
+        {
+            text = (await templates.AdviceAsync(kind, ct))?.Text(kind);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Advice is optional: the answer goes out without it.
+        }
+        _advice[kind] = (now + AdviceLife, text);
+        return text;
+    }
+
     private long _failures;
 
     /// <summary>The enhancer this one adds to, so a health report can still reach it.</summary>
@@ -89,7 +113,7 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates, IMem
                 : found.Challengers.Count >= 2 ? Arms.Assign(kind, answer.RequestId, await SharesAsync(kind, found, ct))
                 : (Arms.Assign(kind, answer.RequestId, found.Challenger is not null), 0);
             var chosen = arm switch { Arms.Champion => found.Champion, Arms.Challenger => found.Challengers[index], _ => null };
-            var held = answer with { HeldOut = arm == Arms.HeldOut, TaskKind = kind, Arm = arm };
+            var held = answer with { HeldOut = arm == Arms.HeldOut, TaskKind = kind, Arm = arm, Advice = await AdviceAsync(kind, ct) };
             Dictionary<string, bool>? drawn = null;
             if (chosen is not null && found.Traits.Count > 0)
             {

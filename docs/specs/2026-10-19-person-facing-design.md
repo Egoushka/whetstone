@@ -1,5 +1,7 @@
 # For the person: expander, coach, weekly report, state-aware trial (goal 0.11)
 
+Status: decisions 1 to 3 built 2026-10-19; decision 4 waits for the owner's privacy decision and has no code.
+
 The earlier goals improve prompts after the fact. This goal helps the person while writing, and shows them where their
 time goes.
 

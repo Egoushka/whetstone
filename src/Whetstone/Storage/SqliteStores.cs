@@ -149,6 +149,25 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
             return found;
         }, ct);
 
+    public async Task<KindAdvice?> AdviceAsync(string kind, CancellationToken ct) => await UseAsync<KindAdvice?>(async connection =>
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH recent AS (
+              SELECT correction_reason, asked_again FROM requests
+              WHERE task_kind = $kind AND completed IS NOT NULL ORDER BY created_at DESC LIMIT 200),
+            reworked AS (
+              SELECT correction_reason FROM recent
+              WHERE COALESCE(correction_reason, '') IN ('wrong_target', 'incomplete', 'wrong_approach', 'misread', 'too_much', 'style')
+                 OR (correction_reason IS NULL AND COALESCE(asked_again, 0) = 1))
+            SELECT (SELECT COUNT(*) FROM recent), (SELECT COUNT(*) FROM reworked),
+                   (SELECT correction_reason FROM reworked WHERE correction_reason IS NOT NULL GROUP BY correction_reason ORDER BY COUNT(*) DESC, correction_reason LIMIT 1)
+            """;
+        command.Parameters.AddWithValue("$kind", kind);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? new KindAdvice((int)reader.GetInt64(0), (int)reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetString(2)) : null;
+    }, ct);
+
     public Task RecordExposuresAsync(string requestId, IReadOnlyList<MemoryExposure> shown, CancellationToken ct) => UseAsync(async connection =>
     {
         foreach (var e in shown)
