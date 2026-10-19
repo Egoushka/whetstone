@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using Whetstone.Context;
 using Whetstone.Contracts;
 using Whetstone.Retrieval;
 using Whetstone.Templates;
@@ -38,6 +39,9 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
     /// <summary>What the retriever may read of a user's store (goal 0.3); the same file as <see cref="ForUser"/>.</summary>
     public IRetrievalIndex IndexFor(string user) => (SqliteStore)ForUser(user);
 
+    /// <summary>The memory slot's record of a user (goal 0.9); the same file as <see cref="ForUser"/>.</summary>
+    public IMemoryLedger MemoryLedgerFor(string user) => (SqliteStore)ForUser(user);
+
     /// <summary>The template store of a user; the same file as <see cref="ForUser"/>.</summary>
     public ITemplates TemplatesFor(string user) => (SqliteStore)ForUser(user);
 
@@ -64,7 +68,7 @@ public sealed partial class SqliteStores(string dataDirectory) : IStores, IDispo
 }
 
 /// <summary>A user's file, opened per call: one writer at a time, no connection held between requests.</summary>
-internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITemplates, IDisposable
+internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITemplates, IMemoryLedger, IDisposable
 {
     private const int BusyMilliseconds = 200;
 
@@ -83,8 +87,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT OR REPLACE INTO requests
-              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id, traits)
-            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session, $traits)
+              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id, traits, ablation)
+            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session, $traits, $ablation)
             """;
         command.Parameters.AddWithValue("$id", row.RequestId);
         command.Parameters.AddWithValue("$at", Text(row.CreatedAt));
@@ -101,6 +105,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$source", (object?)row.SourceRequestId ?? DBNull.Value);
         command.Parameters.AddWithValue("$arm", (object?)row.Arm ?? DBNull.Value);
         command.Parameters.AddWithValue("$session", (object?)row.SessionId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$ablation", (object?)row.Ablation ?? DBNull.Value);
         command.Parameters.AddWithValue("$traits", (object?)row.Traits ?? DBNull.Value);
         var stored = await command.ExecuteNonQueryAsync(ct);
         if (row.Corrects is null)
@@ -119,6 +124,49 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         correct.Parameters.AddWithValue("$at", Text(row.CreatedAt));
         correct.Parameters.AddWithValue("$id", row.RequestId);
         return stored + await correct.ExecuteNonQueryAsync(ct);
+    }, ct);
+
+    public async Task<IReadOnlyDictionary<string, MemoryRecord>> MemoryRecordsAsync(IReadOnlyCollection<string> documentKeys, CancellationToken ct) =>
+        await UseAsync<IReadOnlyDictionary<string, MemoryRecord>>(async connection =>
+        {
+            var found = new Dictionary<string, MemoryRecord>(StringComparer.Ordinal);
+            foreach (var key in documentKeys)
+            {
+                // A run helped when it completed and no correction blamed it; asked_again stands in when no reason was given.
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    SELECT COUNT(*), COALESCE(SUM(CASE WHEN r.completed = 1 AND NOT (
+                        COALESCE(r.correction_reason, '') IN ('wrong_target', 'incomplete', 'wrong_approach', 'misread', 'too_much', 'style')
+                        OR (r.correction_reason IS NULL AND COALESCE(r.asked_again, 0) = 1)) THEN 1 ELSE 0 END), 0)
+                    FROM memory_exposures e JOIN requests r ON r.request_id = e.request_id
+                    WHERE e.document_key = $key AND r.completed IS NOT NULL
+                    """;
+                command.Parameters.AddWithValue("$key", key);
+                await using var reader = await command.ExecuteReaderAsync(ct);
+                if (await reader.ReadAsync(ct) && reader.GetInt64(0) > 0)
+                    found[key] = new MemoryRecord((int)reader.GetInt64(0), (int)reader.GetInt64(1));
+            }
+            return found;
+        }, ct);
+
+    public Task RecordExposuresAsync(string requestId, IReadOnlyList<MemoryExposure> shown, CancellationToken ct) => UseAsync(async connection =>
+    {
+        foreach (var e in shown)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.CommandText = """
+                INSERT OR IGNORE INTO memory_exposures (request_id, document_key, memory_id, text_hash, rank, score)
+                VALUES ($request, $key, $memory, $hash, $rank, $score)
+                """;
+            insert.Parameters.AddWithValue("$request", requestId);
+            insert.Parameters.AddWithValue("$key", e.DocumentKey);
+            insert.Parameters.AddWithValue("$memory", e.MemoryId);
+            insert.Parameters.AddWithValue("$hash", e.TextHash);
+            insert.Parameters.AddWithValue("$rank", e.Rank);
+            insert.Parameters.AddWithValue("$score", e.Score);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+        return shown.Count;
     }, ct);
 
     public async Task<bool> RecordOutcomeAsync(OutcomeRow outcome, CancellationToken ct) => await UseAsync(async connection =>

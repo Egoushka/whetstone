@@ -1,6 +1,6 @@
 # Context: slots filled from memory and recent failures, and trials of instructions (goal 0.9)
 
-Status: outline, decision 1 revised 2026-10-19 after a research pass over the memory service the owner runs.
+Status: built 2026-10-19 (decisions 1 to 4; the client side of 3 and 4 is a follow-up in the client). Decision 1 was revised after a research pass over the memory service the owner runs.
 
 Templates already have slots (`{{repository}}`, `{{commit}}`, `{{task_kind}}`). This goal adds slots whose value comes
 from outside the request, and runs the same trials on the instructions a client loads (instruction files and skills)

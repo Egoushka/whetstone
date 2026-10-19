@@ -38,6 +38,9 @@ public sealed record RequestRow
     /// <summary>The client's opaque session id; requests that share it share a session.</summary>
     public string? SessionId { get; init; }
 
+    /// <summary>What the client held out for the session (an instruction rule or a skill version), when it ran an ablation.</summary>
+    public string? Ablation { get; init; }
+
     public required bool Changed { get; init; }
 
     public string? TemplateId { get; init; }
@@ -81,6 +84,7 @@ public sealed record RequestRow
             TaskKind = Clean(context?.TaskKind ?? response.TaskKind),
             Client = Clean(context?.Client),
             SessionId = Clean(context?.SessionId),
+            Ablation = Clean(context?.Ablation),
             Changed = response.Changed,
             TemplateId = Clean(response.TemplateId),
             TemplateVersion = Clean(response.TemplateVersion),

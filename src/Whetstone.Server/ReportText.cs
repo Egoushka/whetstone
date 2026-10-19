@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Whetstone.Context;
 using Whetstone.Templates;
 
 namespace Whetstone.Server;
@@ -7,7 +8,9 @@ namespace Whetstone.Server;
 /// <summary>The text of <c>whetstone report</c>: per kind, who got what and what the promotion rule says.</summary>
 internal static class ReportText
 {
-    public static string Format(IReadOnlyList<KindReport> kinds, int untracked, HandLabels? labels = null, IReadOnlyList<TraitReport>? traits = null)
+    public static string Format(
+        IReadOnlyList<KindReport> kinds, int untracked, HandLabels? labels = null, IReadOnlyList<TraitReport>? traits = null,
+        (AblationLine Baseline, IReadOnlyList<AblationLine> Lines)? ablations = null)
     {
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $"{kinds.Count} kinds in template trials; {untracked} stored requests are in none.\n");
@@ -45,6 +48,14 @@ internal static class ReportText
             foreach (var rival in kind.Rivals ?? [])
                 foreach (var look in rival.Looks)
                     text.Append(CultureInfo.InvariantCulture, $"  look at {look.Runs} runs of {rival.TemplateId} v{rival.Version} (champion {look.ChampionRuns}): z {look.Z:0.0}, {look.Verdict} ({look.Why})\n");
+        }
+        if (ablations is { Lines.Count: > 0 } a)
+        {
+            text.Append("\nablations (sessions that held one rule or skill version out):\n");
+            foreach (var line in a.Lines.Prepend(a.Baseline))
+                text.Append(CultureInfo.InvariantCulture, $"  {line.Ablation}: {line.Sessions} sessions, {line.Runs} runs, completed {Percent(line.Completed, line.Runs)}")
+                    .Append(line.ReworkReported > 0 ? $", rework {Percent(line.Rework, line.ReworkReported)}" : "")
+                    .Append(line.RemovalCandidate ? $"; no effect after {Ablations.Sessions} sessions: a removal candidate" : "").Append('\n');
         }
         if (labels is { } l)
             text.Append(CultureInfo.InvariantCulture, $"\nhand labels: {l.Labelled} labelled, {l.Compared} with a reported completion; the proxy (completed, no rework) agrees on {Percent(l.Agree, l.Compared)}")

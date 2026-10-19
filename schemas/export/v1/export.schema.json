@@ -21,7 +21,8 @@
         "commit": { "type": "string" },
         "task_kind": { "type": "string" },
         "client": { "type": "string" },
-        "session_id": { "type": "string", "description": "The client's opaque session id; an import stores a hash of the transcript's session id." }
+        "session_id": { "type": "string", "description": "The client's opaque session id; an import stores a hash of the transcript's session id." },
+        "ablation": { "type": "string", "description": "What the client held out for the session (rule:<id>, skill:<name>@<version>)." }
       }
     },
     "answer": {

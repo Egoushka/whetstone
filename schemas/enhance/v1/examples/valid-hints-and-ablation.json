@@ -1,0 +1,4 @@
+{
+  "request": { "prompt": "find why the parser test fails", "context": { "task_kind": "agent/explore", "session_id": "s-7f3a", "hints": { "last_ci_failure": "tests/ParserTests.cs" }, "ablation": "rule:stop-rule" } },
+  "response": { "prompt": "find why the parser test fails", "changed": false, "template_id": null, "template_version": null, "reason": "held out", "task_kind": "agent/explore", "request_id": "req-0005", "held_out": true }
+}

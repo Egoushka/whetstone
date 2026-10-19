@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Whetstone.Context;
 using Whetstone.Contracts;
 using Whetstone.Gym;
 using Whetstone.Import;
@@ -603,7 +604,7 @@ public static partial class Commands
             var reports = inTrials.Select(kind => Trials.Evaluate(kind, runs.GetValueOrDefault(kind) ?? [], current.GetValueOrDefault(kind, KindTemplates.None), settings.PersonTimeKinds)).ToList();
             var tracked = reports.Sum(r => r.Runs.Values.Sum());
             var traits = Trials.TraitEffects(runs.ToDictionary(k => k.Key, k => (IReadOnlyList<TrialRun>)k.Value, StringComparer.Ordinal));
-            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked, HandLabels.Of(records, settings.Weights), traits));
+            await output.WriteAsync(ReportText.Format(reports, records.Count - tracked, HandLabels.Of(records, settings.Weights), traits, Ablations.Of(records, settings.Weights)));
             return Ok;
         }
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)

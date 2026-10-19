@@ -72,6 +72,12 @@ Reads every `*.jsonl` file under DIR, at any depth, as Claude Code session trans
 
 It also stores the prompts agents wrote, counted on a second line (`N prompts written by agents and orchestrators: ...`): the `prompt` of each `Agent` call (client `claude-code/agent`), of each `WebFetch` call (`claude-code/fetch`, kind `fetch/extract`), and each turn an orchestrator sent into a session (turn origin `sdk`, client `claude-code/sdk`, kind `orchestrator/turn`). They get no score; the run measures come from the call's result in the transcript: completed, duration, tool calls, tokens, model. A background launch has no result yet, so only its model is kept; token counts are those of the run's final request, as the client records them. The kind of an `Agent` prompt is `agent/<subagent type>`, and for the general-purpose agent `agent/general-purpose/<job>` from the first verb of the call's description (`explore`, `research`, `review`, `implement`, `ship`) or `agent/general-purpose` when no verb matches ([PromptKinds.cs](../../src/Whetstone/Kinds/PromptKinds.cs)). The same `--exclude` and `--exclude-text` rules apply to them: a session left out keeps its agent prompts out.
 
+### Context slots (goal 0.9)
+
+A template may use `{{hint_<name>}}`, filled from `context.hints` (for example the failing test path from the last CI run, which the client knows and whetstone does not fetch), and `{{memory}}`, filled from the configured memory service: up to ten memories recalled for the prompt and the repository within 0.9 s, one per source document, weighted by how runs that were shown that document went, and the top five kept, inside a `<whetstone_memory>` marker a session-retain job can strip. A document's weight moves only after 5 exposures, and one that helped in fewer than 1 in 5 of 10 or more runs is dropped. The record is whetstone's own (`memory_exposures`: request, document, memory id, a hash of the text); nothing is written to the memory service. A slot with no value drops its line, so a late or failed recall serves the template without it. Whether the slot helps is a trial like any other: the same template with and without it.
+
+With `context.ablation` set, `report` ends with an ablations section: per held-out rule or skill version, sessions, runs, completion and rework beside sessions that held nothing out, and "a removal candidate" when after 100 sessions completion and rework differ by less than 5 points. The client applies the ablation; whetstone only compares.
+
 ### gym
 
 `whetstone gym select --kind K [--limit N] [--confirm]` picks stored requests the replay gym may run again ([ADR 0006](../adr/0006-replay-gym-screens-challengers.md)): of a read-only kind (`agent/explore`, `agent/plan`, `agent/claude-code-guide`, `agent/box-reader`, `agent/general-purpose/explore`, `agent/general-purpose/research`), with a repository and a commit, not about live state (CI, pull requests, deploys, logs, "today"), and with no redaction marker. Newest first, 30 by default. It prints why the others were left out and counts until `--confirm`; then it stores each as a case: the request id, repository, commit, kind and a hash of the prompt, never a copy. A request already a case is not picked again.
@@ -107,6 +113,9 @@ It also stores the prompts agents wrote, counted on a second line (`N prompts wr
 | `WHETSTONE_USER` | `owner` | every command; 1 to 64 of `a-z`, `0-9`, `_`, `-` |
 | `WHETSTONE_DATA_DIR` | `whetstone` under the local application data directory | every command |
 | `WHETSTONE_TEMPLATES` | off | `serve` and `mcp`: `on` seeds the shipped templates and serves them (see "Templates and arms" below); anything else leaves every answer as it was |
+| `WHETSTONE_MEMORY_URL` | unset | `serve` and `mcp` with templates on: the base address of a Hindsight server; a template with a `{{memory}}` slot is filled from its recall (read only, nothing written back). Unset leaves the slot empty |
+| `WHETSTONE_MEMORY_BANK` | `projects` | the bank recalled from |
+| `WHETSTONE_MEMORY_KEY` | unset | a bearer key for the memory server, if it needs one |
 | `WHETSTONE_COST_WEIGHTS` | `1,1.25,0.1,5` | `report`: weights of input, cache write, cache read and output tokens in a run's cost; four numbers of 0 or more, or `report` exits 2 |
 | `WHETSTONE_PERSON_TIME_KINDS` | `typed/` | `report`: comma-separated kind prefixes whose cost-only decisions compare the person's time (`person_ms`) instead of run cost |
 | `WHETSTONE_WRITER_URL`, `_MODEL`, `_KEY`, `_MAX_USD_CALL`, `_MAX_USD_WEEK`, `_PRICE` | none (off) | `template write`: the OpenAI-compatible chat endpoint (base address, `/chat/completions` is added), the model, its key, the most one call may cost, the most a week may cost, and the prices in dollars per million tokens (`3,15`: input, output). All six or none; no default is assumed |
@@ -135,6 +144,8 @@ The arguments are the `request` part of [enhance.schema.json](../../schemas/enha
 | `context.task_kind` | string | Optional |
 | `context.client` | string | Optional |
 | `context.session_id` | string | Optional; 1 to 128 characters, opaque; requests that share it share a session |
+| `context.hints` | object | Optional; up to 10 names (`a-z`, `0-9`, `_`) to strings of at most 500 characters; fill `{{hint_<name>}}` slots; not stored |
+| `context.ablation` | string | Optional; what the client held out for the session (`rule:<id>`, `skill:<name>@<version>`); stored and compared in `report` |
 | `deadline_ms` | integer | 50 to 30000; default 1500 |
 
 The result has structured content and the prompt as text:

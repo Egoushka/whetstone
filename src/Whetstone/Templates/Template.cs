@@ -36,24 +36,33 @@ public static class TemplateRoles
 /// <summary>
 /// Versioned text that frames a prompt of one kind: <paramref name="Before"/> and <paramref name="After"/> around the original,
 /// which is never changed (design decision 3). A version is immutable; new text is a new version. The slots
-/// <c>{{repository}}</c>, <c>{{commit}}</c> and <c>{{task_kind}}</c> are filled from the request's context.
+/// <c>{{repository}}</c>, <c>{{commit}}</c> and <c>{{task_kind}}</c> are filled from the request's context, <c>{{hint_NAME}}</c> from
+/// the client's <c>context.hints</c>, and <c>{{memory}}</c> from a configured memory service (goal 0.9).
 /// </summary>
 public sealed partial record Template(string Id, string Version, string Kind, string Before, string After, string Source)
 {
-    public static readonly IReadOnlySet<string> Slots = new HashSet<string>(["repository", "commit", "task_kind"], StringComparer.Ordinal);
+    public static readonly IReadOnlySet<string> Slots = new HashSet<string>(["repository", "commit", "task_kind", MemorySlot], StringComparer.Ordinal);
+
+    public const string MemorySlot = "memory";
+
+    /// <summary>The prefix of a slot filled from <c>context.hints</c>: <c>{{hint_last_ci_failure}}</c> takes the hint <c>last_ci_failure</c>.</summary>
+    public const string HintPrefix = "hint_";
+
+    /// <summary>Whether the template has a <c>{{memory}}</c> slot, so serving it needs a recall.</summary>
+    public bool UsesMemory => Slot().Matches(Before + "\n" + After).Any(m => m.Groups[1].Value == MemorySlot);
 
     [GeneratedRegex(@"\{\{(\w+)\}\}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex Slot();
 
     /// <summary>The slot names a text uses that whetstone does not fill; a template that has any is not served.</summary>
     public IEnumerable<string> UnknownSlots() =>
-        Slot().Matches(Before + "\n" + After).Select(m => m.Groups[1].Value).Where(name => !Slots.Contains(name)).Distinct(StringComparer.Ordinal);
+        Slot().Matches(Before + "\n" + After).Select(m => m.Groups[1].Value).Where(name => !Slots.Contains(name) && !name.StartsWith(HintPrefix, StringComparison.Ordinal)).Distinct(StringComparer.Ordinal);
 
     /// <summary>
     /// The prompt framed by the template, or null when the template cannot be served as it should (a slot it does not know, or a
     /// result that does not hold the prompt byte for byte). A slot with no value drops its whole line.
     /// </summary>
-    public string? Render(string prompt, EnhanceContext? context)
+    public string? Render(string prompt, EnhanceContext? context, string? memory = null)
     {
         if (UnknownSlots().Any())
             return null;
@@ -62,7 +71,10 @@ public sealed partial record Template(string Id, string Version, string Kind, st
             ["repository"] = context?.Repository,
             ["commit"] = context?.Commit,
             ["task_kind"] = context?.TaskKind,
+            [MemorySlot] = memory,
         };
+        foreach (var (name, value) in context?.Hints ?? new Dictionary<string, string>())
+            values[HintPrefix + name] = value;
         var text = new StringBuilder();
         var before = Fill(Before, values);
         if (before.Length > 0)
@@ -83,7 +95,7 @@ public sealed partial record Template(string Id, string Version, string Kind, st
             var missing = false;
             var filled = Slot().Replace(line, m =>
             {
-                if (values[m.Groups[1].Value] is { Length: > 0 } value)
+                if (values.GetValueOrDefault(m.Groups[1].Value) is { Length: > 0 } value)
                     return value;
                 missing = true;
                 return "";

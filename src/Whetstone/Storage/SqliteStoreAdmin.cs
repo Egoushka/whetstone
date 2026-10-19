@@ -46,7 +46,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
                    rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
-                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}, {(version >= 9 ? "traits" : "NULL")}
+                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}, {(version >= 9 ? "traits" : "NULL")}, {(version >= 11 ? "ablation" : "NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -56,7 +56,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             var reported = reader.IsDBNull(17) ? null : reader.GetString(17);
             yield return new ExportRecord(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3) != 0,
-                new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7), Text(reader, 29)),
+                new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7), Text(reader, 29), Text(reader, 42)),
                 new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18), Text(reader, 28), TraitsOf(Text(reader, 41))),
                 reported is null
                     ? null
@@ -94,6 +94,12 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             await using var orphans = connection.CreateCommand();
             orphans.CommandText = StoreSchema.ForgetOrphanedGymRows;
             await orphans.ExecuteNonQueryAsync(ct);
+            if (version >= 11)
+            {
+                await using var exposures = connection.CreateCommand();
+                exposures.CommandText = StoreSchema.ForgetOrphanedExposures;
+                await exposures.ExecuteNonQueryAsync(ct);
+            }
         }
         if (deleted > 0)
         {

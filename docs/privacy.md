@@ -17,6 +17,7 @@ problem, a pasted error with a token in it. This page is the rule for every goal
 | which stored request a retrieval drew on | 0.3 | until deleted |
 | templates and their versions | 0.5 | until deleted |
 | prompts typed in past sessions, imported by the owner, each with an implicit score | 0.7 | until deleted |
+| which memories a request was shown (memory id, source document, a hash of the text; never the text) | 0.9 | until deleted, with the request |
 | replay cases, runs and judge verdicts (ids, prompt hashes, measures; no answers) | 0.8 | until deleted, with the request |
 | prompts agents and orchestrators wrote in past sessions (subagent tasks, page-extraction questions, orchestrator turns), imported by the owner, each with the run measures the transcript recorded | 0.4 | until deleted |
 
@@ -50,8 +51,9 @@ Nothing else: no file contents, no model answers, no other users' data.
 - **Outbound calls.** The only outbound call is to the model the owner configures for `whetstone template write` (goal 0.7;
   off unless all six `WHETSTONE_WRITER_*` settings are given, and sent only with `--confirm`). It carries the champion's text,
   the newest few stored prompts of that kind that ended in rework with the reason they were corrected, and the nearest retired
-  templates, all redacted once more before they leave; the key is read from the environment and never stored or printed. Planned for goal 0.9: a recall query to the owner's own memory
-  service, nothing written back (docs/specs/2026-10-19-context-slots-design.md).
+  templates, all redacted once more before they leave; the key is read from the environment and never stored or printed. With `WHETSTONE_MEMORY_URL` set (goal 0.9), a recall query (the redacted
+  prompt, cut at 2,000 characters, and the repository name) goes to the owner's own memory service; nothing is written back
+  (docs/specs/2026-10-19-context-slots-design.md).
 - **Replays (goal 0.8, ADR 0006).** `whetstone gym run` may send a stored, redacted prompt and a template's text to the gym
   client the owner configures (a coding-agent orchestrator pinned to the request's commit) and to the judge model the
   owner configures. Only cases from repositories the gym client already holds are sent. The answers are not stored; the

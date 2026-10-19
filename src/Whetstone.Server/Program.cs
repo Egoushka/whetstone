@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using Whetstone;
+using Whetstone.Context;
 using Whetstone.Retrieval;
 using Whetstone.Server;
 using Whetstone.Storage;
@@ -82,7 +83,20 @@ if (Environment.GetEnvironmentVariable("WHETSTONE_TEMPLATES") is "on")
     var templates = stores.TemplatesFor(user);
     await templates.SeedAsync(BuiltInTemplates.All, TemplateRoles.Champion, cts.Token);
     await templates.SeedAsync(BuiltInTemplates.TypedChallengers, TemplateRoles.Challenger, cts.Token);
-    enhancer = new TemplateEnhancer(enhancer, templates);
+    // The memory slot reads from the owner's own memory service when one is configured; without it the slot stays empty.
+    IMemorySource? memory = null;
+    if (Environment.GetEnvironmentVariable("WHETSTONE_MEMORY_URL") is { Length: > 0 } memoryUrl)
+    {
+        if (!Uri.TryCreate(memoryUrl.EndsWith('/') ? memoryUrl : memoryUrl + "/", UriKind.Absolute, out var memoryBase))
+        {
+            Console.Error.WriteLine("whetstone: WHETSTONE_MEMORY_URL is an absolute http(s) address");
+            return 2;
+        }
+        memory = new HindsightMemory(new HttpClient { Timeout = TimeSpan.FromSeconds(2) }, memoryBase,
+            Environment.GetEnvironmentVariable("WHETSTONE_MEMORY_BANK") is { Length: > 0 } bank ? bank : "projects",
+            Environment.GetEnvironmentVariable("WHETSTONE_MEMORY_KEY"));
+    }
+    enhancer = new TemplateEnhancer(enhancer, templates, memory, stores.MemoryLedgerFor(user));
 }
 // The reason is an exception type: a message may quote a prompt.
 var store = new GuardedStore(stores.ForUser(user), reason => Console.Error.WriteLine($"whetstone: could not store a request ({reason})"));
