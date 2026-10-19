@@ -1,5 +1,5 @@
 {
   "name": "whetstone",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sends typed prompts through whetstone (kinds, template trials, a held-out arm), shows what changed, and reports how each turn went"
 }

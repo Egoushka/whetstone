@@ -4,6 +4,7 @@ export const MIN_CHARS = 40
 export const MAX_CHARS = 2000
 
 const SECRET = /BEGIN [A-Z ]*PRIVATE KEY|AKIA|eyJ|gh[pousr]_|glpat-|xox[abprs]-|sk-|pass|pwd|api[ _-]?key|secret|token|bearer/i
+export const EMPLOYER_DIR = '/Projects/work'
 const BYPASS = /^\s*[*\/!]/
 
 /** Why this prompt does not go to whetstone, or undefined when it may. */
@@ -15,7 +16,7 @@ export function skipReason(text: string, cwd: string, hasAttachments: boolean, o
   if (hasAttachments) return 'has attachments'
   if (text.length < MIN_CHARS) return 'short'
   if (text.length > MAX_CHARS || text.includes('<pasted_content')) return 'long or pasted'
-  if (cwd.includes('/Projects/work')) return 'employer work'
+  if (cwd.includes(EMPLOYER_DIR)) return 'employer work'
   if (SECRET.test(text)) return 'may hold a credential'
   return undefined
 }
@@ -34,4 +35,12 @@ export function isCorrection(text: string): boolean {
 export function repositoryOf(remote: string): string | undefined {
   const m = remote.trim().match(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?$/)
   return m?.[1]
+}
+
+const LEVEL = /^\s*\*(cheap|max)\b[ \t]*/i
+
+/** A `*cheap` or `*max` prefix is the price level the person chose (`cheap`, `best`); the prompt comes back without it. */
+export function levelOf(text: string): { level?: 'cheap' | 'best'; text: string } {
+  const m = text.match(LEVEL)
+  return m ? { level: m[1]!.toLowerCase() === 'cheap' ? 'cheap' : 'best', text: text.slice(m[0].length) } : { text }
 }

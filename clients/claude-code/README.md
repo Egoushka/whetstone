@@ -8,6 +8,15 @@ Sends the prompts you type through whetstone (ADR 0005), shows what changed, and
   A change is logged with the reason; `/whetstone` lists the last ten with the originals.
 - `turn.complete`: calls `feedback` with `completed`, tokens (input, output, cache read, cache write), `duration_ms` and the model.
   The next typed prompt sets `asked_again` on the previous request when it opens like a correction.
+- Price level: a prompt that starts with `*cheap` or `*max` sends `level` `cheap` or `best` and loses the prefix, whether or not whetstone answers.
+- `person_ms`: the pause between the end of the last answer and a prompt (reading it and typing), capped at 10 minutes. A correction's
+  pause is added to the request it corrects; the pause before a prompt that follows an `output/` kind is its `read_ms`. Approval waits
+  and `edit_chars` are not measured: the mod API shows neither.
+- Context `hints`: `last_ci_failure` (workflow / job / step of the branch's newest failed run, read with `gh` in the background,
+  at most every 5 minutes, never for `Projects/work`).
+- Subagents (`agent.spawn`): the subagent's prompt is a request of its own with `parent_request_id` set to the prompt that started it,
+  and its turn is reported. Only a server template for the kind is applied; teammates and forks are left alone.
+- Not sent: `ablation`. The server only compares; the client must hold a rule out, which needs opt-in by the owner (not built).
 - Left alone: slash commands, prompts under 40 or over 2,000 characters, pasted text, attachments, anything that looks like a
   credential, folders under `Projects/work`, and a prompt that starts with `*`, `/` or `!`.
 - Fails open: no key, no server, a slow answer (1.2 s), a bad reply or any error sends the prompt as typed.
