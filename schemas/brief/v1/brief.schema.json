@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Egoushka/whetstone/schemas/brief/v1/brief.schema.json",
+  "title": "brief/v1",
+  "description": "The brief tool's arguments: an agent about to start a subagent asks how to brief it for a kind. The answer is an enhance/v1 response: the prompt framed by the kind's champion (or a challenger, or unchanged when held out), recorded like an enhance call.",
+  "type": "object",
+  "required": ["task_kind", "prompt"],
+  "additionalProperties": false,
+  "properties": {
+    "task_kind": { "type": "string", "minLength": 1, "description": "The kind of brief, such as agent/explore." },
+    "prompt": { "type": "string", "minLength": 1, "description": "The brief as the agent would write it." },
+    "repository": { "type": "string" },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "client": { "type": "string", "description": "Who asks; brief when left out." },
+    "session_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "parent_request_id": { "type": "string", "minLength": 1, "maxLength": 128, "description": "The request of the orchestrator prompt the agent is running, so the brief is scored with its children." },
+    "deadline_ms": { "type": "integer", "minimum": 50, "maximum": 30000, "default": 1500 }
+  }
+}

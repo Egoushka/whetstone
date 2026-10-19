@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Whetstone.Agents;
 using Whetstone.Context;
 using Whetstone.Contracts;
 using Whetstone.Gym;
@@ -249,6 +250,82 @@ public static partial class Commands
         catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or HttpRequestException)
         {
             return Fail(error, "gym", e);
+        }
+    }
+
+    private static string AgentsText(IReadOnlyList<ParentLine> parents, IReadOnlyList<OutputLine> outputs)
+    {
+        var text = new System.Text.StringBuilder("orchestrator kinds, scored by the runs their prompts started:\n");
+        if (parents.Count == 0)
+            text.Append("  none yet: no request names a parent (context.parent_request_id)\n");
+        foreach (var p in parents)
+            text.Append(CultureInfo.InvariantCulture, $"  {p.Kind}: {p.Parents} prompts started {p.Children} runs; {Percent(p.ChildrenGood, p.ChildrenMeasured)} of the measured ones completed without rework")
+                .Append(p.MedianChildCost is { } c ? FormattableString.Invariant($"; median cost of one prompt's children {c:0}") : "").Append('\n');
+        text.Append("output kinds, scored by their reader:\n");
+        if (outputs.Count == 0)
+            text.Append("  none yet: no output/ kind has read_ms or edit_chars reported\n");
+        foreach (var o in outputs)
+            text.Append(CultureInfo.InvariantCulture, $"  {o.Kind}  {o.Template}: {o.Runs} runs")
+                .Append(o.MedianReadMs is { } r ? FormattableString.Invariant($", median read {r / 1000:0.#} s") : "")
+                .Append(o.MedianEditChars is { } e ? FormattableString.Invariant($", median edits {e:0} characters") : "").Append('\n');
+        return text.ToString();
+    }
+
+    public const string KindsUsage = "usage: whetstone kinds suggest [--limit N]";
+
+    /// <summary>Proposed kinds for prompts of kind <c>other</c> and the wide <c>agent/general-purpose</c> (goal 0.12, decision 2). Reads only.</summary>
+    public static async Task<int> KindsAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        if (options.Count == 0 || options[0] != "suggest")
+            return Refuse(error, "a kinds command is suggest", KindsUsage);
+        if (!Parse([.. options.Skip(1)], ["--limit"], [], out var parsed, out var problem))
+            return Refuse(error, problem!, KindsUsage);
+        var limit = 10;
+        if (parsed!.TryGetValue("--limit", out var text) && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit < 1))
+            return Refuse(error, "--limit is a whole number above 0", KindsUsage);
+        try
+        {
+            var records = new List<ExportRecord>();
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                records.Add(record);
+            var proposals = AgentStructure.SuggestKinds(records, new HashSet<string>(["other", "agent/general-purpose"], StringComparer.Ordinal), limit: limit);
+            if (proposals.Count == 0)
+                await output.WriteAsync("No group of five or more prompts shares a distinctive word.\n");
+            foreach (var p in proposals)
+            {
+                await output.WriteAsync($"{p.Word}: {p.Count} prompts\n");
+                foreach (var example in p.Examples)
+                    await output.WriteAsync($"  {example}\n");
+            }
+            await output.WriteAsync("Proposals only: a kind exists once the owner adds a rule for it.\n");
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "kinds", e);
+        }
+    }
+
+    public const string GraduateUsage = "usage: whetstone graduate";
+
+    /// <summary>Graduation and removal proposals as Markdown on stdout (goal 0.12, decision 3). Reads only; opening a pull request elsewhere is the owner's act.</summary>
+    public static async Task<int> GraduateAsync(IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct, TrialSettings? settings = null)
+    {
+        if (options.Count > 0)
+            return Refuse(error, $"unknown option '{options[0]}'", GraduateUsage);
+        settings ??= TrialSettings.Default;
+        try
+        {
+            var records = new List<ExportRecord>();
+            await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                records.Add(record);
+            var champions = (await admin.TemplatesAsync(ct)).Where(t => t.Role == TemplateRoles.Champion).Select(t => t.Template).ToList();
+            await output.WriteAsync(AgentStructure.Graduation(await admin.TemplateDecisionsAsync(ct), champions, Ablations.Of(records, settings.Weights).Lines));
+            return Ok;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        {
+            return Fail(error, "graduate", e);
         }
     }
 
@@ -574,7 +651,7 @@ public static partial class Commands
         }
     }
 
-    public const string ReportUsage = "usage: whetstone report [--routing | --effort | --person]";
+    public const string ReportUsage = "usage: whetstone report [--routing | --effort | --person | --agents]";
 
     /// <summary>
     /// Reads your store and prints, per kind of prompt in a template trial, the runs each arm got, how they went and what the
@@ -584,10 +661,10 @@ public static partial class Commands
         IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct, TrialSettings? settings = null)
     {
         settings ??= TrialSettings.Default;
-        if (!Parse(options, [], ["--routing", "--effort", "--person"], out var reportParsed, out var problem))
+        if (!Parse(options, [], ["--routing", "--effort", "--person", "--agents"], out var reportParsed, out var problem))
             return Refuse(error, problem!, ReportUsage);
         if (reportParsed!.Count > 1)
-            return Refuse(error, "--routing, --effort and --person are one report each", ReportUsage);
+            return Refuse(error, "--routing, --effort, --person and --agents are one report each", ReportUsage);
         if (reportParsed.Count == 1)
         {
             try
@@ -595,6 +672,11 @@ public static partial class Commands
                 var all = new List<ExportRecord>();
                 await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
                     all.Add(record);
+                if (reportParsed.ContainsKey("--agents"))
+                {
+                    await output.WriteAsync(AgentsText(AgentStructure.Parents(all, settings.Weights), AgentStructure.Outputs(all)));
+                    return Ok;
+                }
                 if (reportParsed.ContainsKey("--person"))
                 {
                     await output.WriteAsync(PersonWeeks.Format(all, settings.Weights, 4));

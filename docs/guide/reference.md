@@ -92,6 +92,14 @@ The shorthand expander is a model challenger, `typed-expand` version `e1`: the m
 
 State-aware templates (the spec's decision 4) are not built: they wait for the owner's privacy decision.
 
+### Agent structure (goal 0.12)
+
+The third MCP tool, `brief` ([brief.schema.json](../../schemas/brief/v1/brief.schema.json)), lets an agent about to start a subagent ask how to brief it: it takes a `task_kind` and the brief, and answers as `enhance` would for that kind (the champion's framing, a challenger or unchanged), recorded the same way, with client `brief` unless one is given.
+
+`whetstone report --agents` scores each orchestrator kind by the runs its prompts started (requests that name it in `context.parent_request_id`): the share of measured child runs that completed without rework, and the median cost of one prompt's children together; and each `output/` kind (handoffs, pull request bodies) and template version by its reader's median `read_ms` and `edit_chars`.
+
+`whetstone kinds suggest [--limit N]` proposes kinds for prompts of kind `other` and `agent/general-purpose`: each prompt goes to its most distinctive word shared with at least four others, and words with five or more prompts are printed with three examples. `whetstone graduate` prints, as Markdown, each champion the owner promoted over a challenger with the counts and note of that decision and its text, and each ablation the report calls a removal candidate: proposals for the owner's shared skills and instructions. Both read only; adding a rule or opening a pull request elsewhere is the owner's act.
+
 ### gym
 
 `whetstone gym select --kind K [--limit N] [--confirm]` picks stored requests the replay gym may run again ([ADR 0006](../adr/0006-replay-gym-screens-challengers.md)): of a read-only kind (`agent/explore`, `agent/plan`, `agent/claude-code-guide`, `agent/box-reader`, `agent/general-purpose/explore`, `agent/general-purpose/research`), with a repository and a commit, not about live state (CI, pull requests, deploys, logs, "today"), and with no redaction marker. Newest first, 30 by default. It prints why the others were left out and counts until `--confirm`; then it stores each as a case: the request id, repository, commit, kind and a hash of the prompt, never a copy. A request already a case is not picked again.
@@ -159,6 +167,7 @@ The arguments are the `request` part of [enhance.schema.json](../../schemas/enha
 | `context.client` | string | Optional |
 | `context.session_id` | string | Optional; 1 to 128 characters, opaque; requests that share it share a session |
 | `context.hints` | object | Optional; up to 10 names (`a-z`, `0-9`, `_`) to strings of at most 500 characters; fill `{{hint_<name>}}` slots; not stored |
+| `context.parent_request_id` | string | Optional; the request of the orchestrator prompt that started this one; the parent kind is scored by its children |
 | `context.level` | `cheap`, `middle` or `best` | Optional; the price level the client chose; a kind's champion stored under `<kind>@<level>` serves it |
 | `context.ablation` | string | Optional; what the client held out for the session (`rule:<id>`, `skill:<name>@<version>`); stored and compared in `report` |
 | `deadline_ms` | integer | 50 to 30000; default 1500 |
@@ -201,6 +210,7 @@ The arguments are [feedback.schema.json](../../schemas/feedback/v1/feedback.sche
 | `outcome.correction_reason` | one of `wrong_target`, `incomplete`, `wrong_approach`, `misread`, `too_much`, `style`, `new_info`, `stop`, `other`, or null | Why the next prompt corrected the run |
 | `outcome.review_findings`, `review_findings_severe` | integer or null | 0 or more; problems a reviewer found in the produced change, and those marked blocking |
 | `outcome.person_ms` | integer or null | 0 or more; the person's time on the request |
+| `outcome.read_ms`, `outcome.edit_chars` | integer or null | 0 or more; for an agent's output (a handoff, a pull request body): the reader's time and the characters they changed |
 | `outcome.rewritten_prompt` | string or null | What the client's model wrote in place of the prompt, sent or reverted (`rewrite_accepted` says which); redacted and cut like a prompt. `export` carries it beside the original `prompt` as a rewrite pair (store schema version 8). Capture only: nothing is trained on it |
 
 The run measures (`completed` to `effort`) came with schema version 3 of the store and are optional within `feedback/v1`. A measure left out is stored as missing, never zero, and a later report for the same request adds the measures it has without erasing one an earlier report gave ([StoreTests.cs](../../tests/Whetstone.Tests/Storage/StoreTests.cs)). `export` writes them inside `outcome`, and leaves out the ones nobody reported.

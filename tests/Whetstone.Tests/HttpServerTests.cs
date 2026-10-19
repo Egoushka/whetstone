@@ -36,8 +36,20 @@ public sealed class HttpServerTests : IAsyncDisposable
 
         var tools = await client.ListToolsAsync();
 
-        Assert.Equal([Tools.Enhance, Tools.Feedback], tools.Select(t => t.Name).Order());
+        Assert.Equal([Tools.Brief, Tools.Enhance, Tools.Feedback], tools.Select(t => t.Name).Order());
         Assert.Equal(WhetstoneServer.Instructions, client.ServerInstructions);
+    }
+
+    [Fact]
+    public async Task Brief_answers_like_enhance_for_the_kind_and_refuses_a_brief_without_one()
+    {
+        await using var client = await Connect(await Start());
+
+        var response = Enhanced(await Call(client, Tools.Brief, """{"task_kind":"agent/explore","prompt":"Find where uploads retry","parent_request_id":"req-1"}"""));
+        var invalid = await Call(client, Tools.Brief, """{"prompt":"Find where uploads retry"}""");
+
+        Assert.Equal("Find where uploads retry", response.Prompt);
+        Assert.True(invalid.IsError);
     }
 
     [Fact]

@@ -87,8 +87,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT OR REPLACE INTO requests
-              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id, traits, ablation)
-            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session, $traits, $ablation)
+              (request_id, created_at, prompt, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out, truncated, source_request_id, arm, session_id, traits, ablation, parent_request_id)
+            VALUES ($id, $at, $prompt, $repository, $commit, $kind, $client, $changed, $tid, $tversion, $held, $cut, $source, $arm, $session, $traits, $ablation, $parent)
             """;
         command.Parameters.AddWithValue("$id", row.RequestId);
         command.Parameters.AddWithValue("$at", Text(row.CreatedAt));
@@ -106,6 +106,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$arm", (object?)row.Arm ?? DBNull.Value);
         command.Parameters.AddWithValue("$session", (object?)row.SessionId ?? DBNull.Value);
         command.Parameters.AddWithValue("$ablation", (object?)row.Ablation ?? DBNull.Value);
+        command.Parameters.AddWithValue("$parent", (object?)row.ParentRequestId ?? DBNull.Value);
         command.Parameters.AddWithValue("$traits", (object?)row.Traits ?? DBNull.Value);
         var stored = await command.ExecuteNonQueryAsync(ct);
         if (row.Corrects is null)
@@ -201,7 +202,7 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
               commits = COALESCE($commits, commits), pr_merged = COALESCE($merged, pr_merged), ci_first_push_green = COALESCE($green, ci_first_push_green),
               reverted = COALESCE($reverted, reverted), item_closed = COALESCE($closed, item_closed), correction_reason = COALESCE($reason, correction_reason),
               review_findings = COALESCE($findings, review_findings), review_findings_severe = COALESCE($severe, review_findings_severe),
-              person_ms = COALESCE($person, person_ms), rewritten_prompt = COALESCE($rewrite, rewritten_prompt)
+              person_ms = COALESCE($person, person_ms), read_ms = COALESCE($read, read_ms), edit_chars = COALESCE($edits, edit_chars), rewritten_prompt = COALESCE($rewrite, rewritten_prompt)
             WHERE request_id = $id
             """;
         command.Parameters.AddWithValue("$id", outcome.RequestId);
@@ -230,6 +231,8 @@ internal sealed class SqliteStore(string path) : IStore, IRetrievalIndex, ITempl
         command.Parameters.AddWithValue("$findings", (object?)outcome.ReviewFindings ?? DBNull.Value);
         command.Parameters.AddWithValue("$severe", (object?)outcome.ReviewFindingsSevere ?? DBNull.Value);
         command.Parameters.AddWithValue("$person", (object?)outcome.PersonMs ?? DBNull.Value);
+        command.Parameters.AddWithValue("$read", (object?)outcome.ReadMs ?? DBNull.Value);
+        command.Parameters.AddWithValue("$edits", (object?)outcome.EditChars ?? DBNull.Value);
         command.Parameters.AddWithValue("$rewrite", (object?)outcome.RewrittenPrompt ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(ct);
     }, ct) > 0;

@@ -20,7 +20,8 @@ public sealed record EnhanceContext(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SessionId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? Hints = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Ablation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Level = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Level = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ParentRequestId = null);
 
 /// <summary>
 /// The <c>enhance</c> response. A pass-through (<see cref="Changed"/> false) is a valid answer, not an error.
@@ -45,4 +46,15 @@ public sealed record EnhanceResponse(
     /// <summary>The traits drawn for this answer, on or off by trait id (goal 0.7, decision 2); kept in the store, not sent to the client.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, bool>? Traits { get; init; }
+}
+
+/// <summary>The <c>brief</c> request (schemas/brief/v1): how to brief a subagent of a kind. Answered as an enhance call for that kind.</summary>
+public sealed record BriefRequest(
+    string TaskKind, string Prompt, string? Repository = null, string? Commit = null, string? Client = null, string? SessionId = null,
+    string? ParentRequestId = null, int DeadlineMs = EnhanceRequest.DefaultDeadlineMs)
+{
+    public const string DefaultClient = "brief";
+
+    public EnhanceRequest ToEnhance() =>
+        new(Prompt, new EnhanceContext(Repository, Commit, TaskKind, Client ?? DefaultClient, SessionId, ParentRequestId: ParentRequestId), DeadlineMs);
 }

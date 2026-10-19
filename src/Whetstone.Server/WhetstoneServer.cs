@@ -35,7 +35,8 @@ public static class WhetstoneServer
     public const string Instructions =
         "whetstone returns a better version of a prompt before you run it. Call enhance with the prompt and the context the "
         + "user allows (repository, commit, task_kind, client); show the returned prompt as a diff and send whichever the user "
-        + "picks. If enhance is slow or fails, send the original. After the run, call feedback with the request_id and the outcome.";
+        + "picks. If enhance is slow or fails, send the original. After the run, call feedback with the request_id and the outcome. "
+        + "An agent about to start a subagent may call brief with the task_kind and its brief, and send what comes back.";
 
     /// <summary>Splits <c>--allowed-hosts</c> or <c>WHETSTONE_ALLOWED_HOSTS</c>: names separated by commas, blanks dropped.</summary>
     public static IReadOnlyList<string> SplitHosts(string? list) =>
@@ -124,6 +125,6 @@ public static class WhetstoneServer
                 o.ServerInfo = new() { Name = "whetstone", Version = Version };
                 o.ServerInstructions = Instructions;
             })
-            .WithTools([Tools.CreateEnhance(), Tools.CreateFeedback()]);
+            .WithTools([Tools.CreateEnhance(), Tools.CreateFeedback(), Tools.CreateBrief()]);
     }
 }

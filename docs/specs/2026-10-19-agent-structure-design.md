@@ -1,5 +1,8 @@
 # Agent structure: orchestrators, kinds, graduation, outputs, a brief tool (goal 0.12)
 
+Status: built 2026-10-19 (decisions 1 to 5). Store schema 12 adds `parent_request_id`, `read_ms` and `edit_chars`. Kind discovery
+uses distinctive words rather than BM25 vectors: simpler, and enough to propose. Clients sending the new fields are follow-ups.
+
 ## Decisions
 
 | # | Question | Decision |

@@ -41,6 +41,9 @@ public sealed record RequestRow
     /// <summary>What the client held out for the session (an instruction rule or a skill version), when it ran an ablation.</summary>
     public string? Ablation { get; init; }
 
+    /// <summary>The orchestrator request that started this one (goal 0.12), when the client said.</summary>
+    public string? ParentRequestId { get; init; }
+
     public required bool Changed { get; init; }
 
     public string? TemplateId { get; init; }
@@ -87,6 +90,7 @@ public sealed record RequestRow
             Client = Clean(context?.Client),
             SessionId = Clean(context?.SessionId),
             Ablation = Clean(context?.Ablation),
+            ParentRequestId = Clean(context?.ParentRequestId),
             Changed = response.Changed,
             TemplateId = Clean(response.TemplateId),
             TemplateVersion = Clean(response.TemplateVersion),
@@ -175,6 +179,10 @@ public sealed record OutcomeRow
 
     public long? PersonMs { get; init; }
 
+    public long? ReadMs { get; init; }
+
+    public long? EditChars { get; init; }
+
     /// <summary>The client's model rewrite, redacted and cut like the prompt it pairs with.</summary>
     public string? RewrittenPrompt { get; init; }
 
@@ -205,6 +213,8 @@ public sealed record OutcomeRow
         ReviewFindings = request.Outcome.ReviewFindings,
         ReviewFindingsSevere = request.Outcome.ReviewFindingsSevere,
         PersonMs = request.Outcome.PersonMs,
+        ReadMs = request.Outcome.ReadMs,
+        EditChars = request.Outcome.EditChars,
         RewrittenPrompt = request.Outcome.RewrittenPrompt is { } rewrite ? RequestRow.CutRedacted(rewrite) : null,
     };
 }

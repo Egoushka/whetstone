@@ -22,7 +22,8 @@
         "task_kind": { "type": "string" },
         "client": { "type": "string" },
         "session_id": { "type": "string", "description": "The client's opaque session id; an import stores a hash of the transcript's session id." },
-        "ablation": { "type": "string", "description": "What the client held out for the session (rule:<id>, skill:<name>@<version>)." }
+        "ablation": { "type": "string", "description": "What the client held out for the session (rule:<id>, skill:<name>@<version>)." },
+        "parent_request_id": { "type": "string", "description": "The orchestrator request that started this one." }
       }
     },
     "answer": {
@@ -71,6 +72,8 @@
             "review_findings": { "type": "integer", "minimum": 0 },
             "review_findings_severe": { "type": "integer", "minimum": 0 },
             "person_ms": { "type": "integer", "minimum": 0 },
+            "read_ms": { "type": "integer", "minimum": 0 },
+            "edit_chars": { "type": "integer", "minimum": 0 },
             "rewritten_prompt": { "type": "string", "description": "What the client's model wrote in place of the prompt, redacted; with the request's prompt it is a rewrite pair, and rewrite_accepted says whether the person sent it." },
             "reported_at": { "type": "string", "format": "date-time" }
           }
