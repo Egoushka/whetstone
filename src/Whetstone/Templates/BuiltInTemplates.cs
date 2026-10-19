@@ -47,6 +47,14 @@ public static class BuiltInTemplates
 
     public const string RewriteVersion = "r1";
 
+    /// <summary>
+    /// The shorthand expander (goal 0.11): a model challenger the Claude Code mod runs on terse typed prompts, keeping the prompt and adding
+    /// a brief under it. Not seeded: putting it on live traffic is the owner's act (<c>whetstone template add --source model</c>).
+    /// </summary>
+    public const string ExpandId = "typed-expand";
+
+    public const string ExpandVersion = "e1";
+
     public static readonly string[] TypedKinds = ["typed/implement", "typed/debug", "typed/research", "typed/review"];
 
     // Each is true of every prompt of its kind and states no file, command or fact of its own.

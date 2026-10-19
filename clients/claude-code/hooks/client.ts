@@ -12,6 +12,7 @@ export type Enhanced = {
   task_kind?: string | null
   request_id: string
   held_out: boolean
+  advice?: string
 }
 
 export type Outcome = {

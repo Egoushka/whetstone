@@ -53,7 +53,8 @@
         "task_kind": { "type": ["string", "null"] },
         "request_id": { "type": "string", "minLength": 1 },
         "held_out": { "type": "boolean" },
-        "source_request_id": { "type": "string", "minLength": 1, "description": "The stored request a retrieval drew on; left out when there was none." }
+        "source_request_id": { "type": "string", "minLength": 1, "description": "The stored request a retrieval drew on; left out when there was none." },
+        "advice": { "type": "string", "minLength": 1, "description": "A line the client may show before sending: how often this kind needed rework lately, and the most common reason. Never blocks." }
       }
     }
   }
