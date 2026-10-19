@@ -16,7 +16,7 @@ Sends the prompts you type through whetstone (ADR 0005), shows what changed, and
   at most every 5 minutes, never for `Projects/work`).
 - Subagents (`agent.spawn`): the subagent's prompt is a request of its own with `parent_request_id` set to the prompt that started it,
   and its turn is reported. Only a server template for the kind is applied; teammates and forks are left alone.
-- Not sent: `ablation`. The server only compares; the client must hold a rule out, which needs opt-in by the owner (not built).
+- Not sent: `ablation`. The server assigns nothing: the client holds a rule out and names it. The mod API cannot do that for instruction-file rules (`prompt.compose` edits the system prompt's sections; CLAUDE.md reaches the model as context the mod does not edit), and a label without a real hold-out would corrupt the comparison.
 - Left alone: slash commands, prompts under 40 or over 2,000 characters, pasted text, attachments, anything that looks like a
   credential, folders under `Projects/work`, and a prompt that starts with `*`, `/` or `!`.
 - Fails open: no key, no server, a slow answer (1.2 s), a bad reply or any error sends the prompt as typed.

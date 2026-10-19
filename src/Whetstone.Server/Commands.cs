@@ -52,7 +52,7 @@ public static partial class Commands
 
     public const string GymUsage = """
         usage: whetstone gym select --kind K [--limit N] [--confirm]
-               whetstone gym run --challenger ID@VERSION [--cases N] [--budget-usd B]
+               whetstone gym run --challenger ID@VERSION [--kind K] [--cases N] [--budget-usd B]
                whetstone gym report --challenger ID@VERSION
                whetstone gym pin|test --template ID@VERSION
                whetstone gym canary | whetstone gym harnesses
@@ -206,7 +206,7 @@ public static partial class Commands
         Func<DateTimeOffset> clock, CancellationToken ct)
     {
         var running = options[0] == "run";
-        if (!Parse([.. options.Skip(1)], running ? ["--challenger", "--cases", "--budget-usd"] : ["--challenger"], [], out var parsed, out var problem))
+        if (!Parse([.. options.Skip(1)], running ? ["--challenger", "--cases", "--budget-usd", "--kind"] : ["--challenger"], [], out var parsed, out var problem))
             return Refuse(error, problem!, GymUsage);
         if (!parsed!.TryGetValue("--challenger", out var named) || named.Split('@') is not [{ Length: > 0 } id, { Length: > 0 } version])
             return Refuse(error, "--challenger ID@VERSION is needed", GymUsage);
@@ -231,7 +231,7 @@ public static partial class Commands
             }
             if (runner is null)
                 return Refuse(error, "no gym client is configured; " + GymSettings.Usage, GymUsage);
-            var template = (await admin.TemplatesAsync(ct)).Select(t => t.Template).FirstOrDefault(t => t.Id == id && t.Version == version);
+            var template = (await admin.TemplatesAsync(ct)).Select(t => t.Template).FirstOrDefault(t => t.Id == id && t.Version == version && (!parsed.TryGetValue("--kind", out var kind) || t.Kind == kind));
             if (template is null)
                 return Refuse(error, $"no stored template {id} v{version}", GymUsage);
             var gymCases = await admin.GymCasesAsync(ct);
