@@ -25,7 +25,15 @@
             "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
             "task_kind": { "type": "string" },
             "client": { "type": "string" },
-            "session_id": { "type": "string", "minLength": 1, "maxLength": 128, "description": "An opaque id the client chooses for the session; requests that share it share a session." }
+            "session_id": { "type": "string", "minLength": 1, "maxLength": 128, "description": "An opaque id the client chooses for the session; requests that share it share a session." },
+            "hints": {
+              "type": "object",
+              "description": "Values for a template's hint slots ({{hint_<name>}}), such as the failing test path from the last CI run. Used for this answer, not stored.",
+              "maxProperties": 10,
+              "propertyNames": { "pattern": "^[a-z0-9_]{1,40}$" },
+              "additionalProperties": { "type": "string", "maxLength": 500 }
+            },
+            "ablation": { "type": "string", "minLength": 1, "maxLength": 128, "description": "What the client held out for this session, such as rule:<id> or skill:<name>@<version>; stored so outcomes can be compared per ablation." }
           }
         },
         "deadline_ms": { "type": "integer", "minimum": 50, "maximum": 30000, "default": 1500 }

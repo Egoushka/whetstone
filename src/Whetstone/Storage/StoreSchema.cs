@@ -5,12 +5,12 @@ namespace Whetstone.Storage;
 
 /// <summary>
 /// The file's tables and how an older file becomes the current one. Version 2 adds <c>source_request_id</c> (which stored request a
-/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). Version 6 adds the owner's hand label, the template decision log and the replay gym's tables (ADR 0006). Version 7 lets a kind have several challengers. Version 8 keeps the rewrite a client's model wrote beside the prompt. Version 9 adds traits and the traits drawn for each request. Version 10 adds the ledger of the challenger writer's spend. The index holds no text of its own: it points at <c>requests</c>, so a
+/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). Version 6 adds the owner's hand label, the template decision log and the replay gym's tables (ADR 0006). Version 7 lets a kind have several challengers. Version 8 keeps the rewrite a client's model wrote beside the prompt. Version 9 adds traits and the traits drawn for each request. Version 10 adds the ledger of the challenger writer's spend. Version 11 adds the ablation a client applied and the memories shown to each request (docs/specs/2026-10-19-context-slots-design.md). The index holds no text of its own: it points at <c>requests</c>, so a
 /// row deleted there is deleted from the index in the same statement, and <c>forget</c> rebuilds it before the file is compacted.
 /// </summary>
 internal static class StoreSchema
 {
-    public const int Version = 10;
+    public const int Version = 11;
 
     /// <summary>The oldest file the commands can still read; the server upgrades it on first use.</summary>
     public const int OldestReadable = 1;
@@ -72,7 +72,8 @@ internal static class StoreSchema
           person_ms INTEGER,
           hand_label INTEGER,
           rewritten_prompt TEXT,
-          traits TEXT
+          traits TEXT,
+          ablation TEXT
         );
         CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
         """;
@@ -180,12 +181,30 @@ internal static class StoreSchema
         );
         """;
 
+    // The memories a request's template was given (docs/specs/2026-10-19-context-slots-design.md, decision 1): keyed by the source
+    // document, which outlives a memory id the memory service rewrites. A hash of the text, never the text.
+    private const string MemoryExposures = """
+        CREATE TABLE IF NOT EXISTS memory_exposures (
+          request_id TEXT NOT NULL,
+          document_key TEXT NOT NULL,
+          memory_id TEXT NOT NULL,
+          text_hash TEXT NOT NULL,
+          rank INTEGER NOT NULL,
+          score REAL,
+          PRIMARY KEY (request_id, document_key)
+        );
+        CREATE INDEX IF NOT EXISTS memory_exposures_by_document ON memory_exposures (document_key);
+        """;
+
     /// <summary>Gym rows whose request is gone; run after a delete so <c>forget</c> leaves none behind (ADR 0006).</summary>
     public const string ForgetOrphanedGymRows = """
         DELETE FROM gym_verdicts WHERE case_id IN (SELECT case_id FROM gym_cases WHERE source_request_id NOT IN (SELECT request_id FROM requests));
         DELETE FROM gym_runs WHERE case_id IN (SELECT case_id FROM gym_cases WHERE source_request_id NOT IN (SELECT request_id FROM requests));
         DELETE FROM gym_cases WHERE source_request_id NOT IN (SELECT request_id FROM requests);
         """;
+
+    /// <summary>Memory exposures whose request is gone (version 11 on).</summary>
+    public const string ForgetOrphanedExposures = "DELETE FROM memory_exposures WHERE request_id NOT IN (SELECT request_id FROM requests)";
 
     // Only an insert and a delete need a trigger: no statement changes a stored prompt. A replaced row (INSERT OR REPLACE) deletes
     // the old one, which fires the delete trigger only while recursive_triggers is on (see Pragmas).
@@ -241,6 +260,9 @@ internal static class StoreSchema
         await Run(connection, transaction, "CREATE INDEX IF NOT EXISTS requests_by_session ON requests (session_id, created_at)", ct);
         await Run(connection, transaction, Decisions, ct);
         await Run(connection, transaction, Gym, ct);
+        if (found is >= 1 and <= 10)
+            await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN ablation TEXT", ct);
+        await Run(connection, transaction, MemoryExposures, ct);
         await Run(connection, transaction, Templates, ct);
         await Run(connection, transaction, Index, ct);
         await Run(connection, transaction, RebuildIndex, ct);

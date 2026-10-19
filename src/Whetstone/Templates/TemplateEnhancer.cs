@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using Whetstone.Context;
 using Whetstone.Contracts;
 using Whetstone.Kinds;
+using Whetstone.Redaction;
 
 namespace Whetstone.Templates;
 
@@ -9,8 +11,15 @@ namespace Whetstone.Templates;
 /// hashes to. A request with no kind, or of kind <c>other</c>, is not templated and is not an arm. A kind with no champion is
 /// held out entirely: answered as <paramref name="inner"/> does, and recorded as the baseline. Any failure returns the inner answer.
 /// </summary>
-public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IEnhancer
+/// <remarks>
+/// A template with a <c>{{memory}}</c> slot is filled from <paramref name="memory"/>, ranked by what <paramref name="ledger"/> learned,
+/// within <see cref="MemoryTimeout"/>; a late, empty or failed recall drops the slot's line and serves the rest (goal 0.9).
+/// </remarks>
+public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates, IMemorySource? memory = null, IMemoryLedger? ledger = null) : IEnhancer
 {
+    /// <summary>How long a recall may take before the slot is left empty; inside the request's own deadline.</summary>
+    public static readonly TimeSpan MemoryTimeout = TimeSpan.FromMilliseconds(900);
+
     /// <summary>How long a kind's allocation stands before the tallies are read again.</summary>
     private static readonly TimeSpan ShareLife = TimeSpan.FromMinutes(1);
 
@@ -44,6 +53,27 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
         return shares;
     }
 
+    private async Task<(string? Block, List<MemoryExposure> Shown)> RecallAsync(EnhanceRequest request, CancellationToken ct)
+    {
+        if (memory is null)
+            return (null, []);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(MemoryTimeout);
+        try
+        {
+            // Only redacted text leaves the process (docs/privacy.md).
+            var recalled = await memory.RecallAsync(Redactor.Redact(request.Prompt).Text, request.Context?.Repository, MemoryRanking.SlotSize * 2, limit.Token);
+            var records = ledger is null || recalled.Count == 0 ? new Dictionary<string, MemoryRecord>()
+                : await ledger.MemoryRecordsAsync([.. recalled.Select(m => m.DocumentKey).Distinct(StringComparer.Ordinal)], limit.Token);
+            var ranked = MemoryRanking.Rank(recalled, records);
+            return (MemoryRanking.Block(ranked), [.. ranked.Select((m, i) => new MemoryExposure(m.DocumentKey, m.Id, MemoryRanking.Hash(m.Text), i + 1, m.Score))]);
+        }
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return (null, []);
+        }
+    }
+
     public async Task<EnhanceResponse> EnhanceAsync(EnhanceRequest request, CancellationToken ct)
     {
         var answer = await inner.EnhanceAsync(request, ct);
@@ -68,8 +98,20 @@ public sealed class TemplateEnhancer(IEnhancer inner, ITemplates templates) : IE
             }
             // The filler stripper is the one source that changes the original, by deleting listed phrases; the answer names them.
             var (stripped, removed) = chosen?.Source == TemplateSources.FillerStrip ? FillerStripper.Strip(answer.Prompt) : (answer.Prompt, []);
-            if (chosen is null || chosen.Render(stripped, request.Context) is not { } prompt)
+            var (block, shown) = chosen?.UsesMemory == true ? await RecallAsync(request, ct) : (null, []);
+            if (chosen is null || chosen.Render(stripped, request.Context, block) is not { } prompt)
                 return held;
+            if (shown.Count > 0 && ledger is not null)
+            {
+                try
+                {
+                    await ledger.RecordExposuresAsync(answer.RequestId, shown, ct);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    // The prompt is served either way; an exposure not recorded only means one run credits no document.
+                }
+            }
             return held with
             {
                 Traits = drawn,
