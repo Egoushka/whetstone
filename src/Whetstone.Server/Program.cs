@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using Whetstone;
 using Whetstone.Context;
+using Whetstone.Gym;
 using Whetstone.Retrieval;
 using Whetstone.Server;
 using Whetstone.Storage;
@@ -27,7 +28,7 @@ const string Usage = """
       gym select --kind K [--limit N] [--confirm]
                                             stored requests of a read-only kind that a replay gym can run again (ADR 0006)
       gym run|report --challenger ID@VERSION
-                                            replay a challenger against its cases and screen it (no gym client yet)
+                                            replay a challenger against its cases and screen it (needs WHETSTONE_GYM_*)
       gym pin|test --template ID@VERSION | gym canary | gym harnesses
                                             unit cases per template, the model-drift canary, gym clients compared
       label list [--kind K] [--limit N] | label set ID yes|no|clear
@@ -138,7 +139,23 @@ switch (args)
     case ["graduate", .. var graduateOptions]:
         return await Commands.GraduateAsync(graduateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["gym", .. var gymOptions]:
-        return await Commands.GymAsync(gymOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+        {
+            var gym = GymSettings.From(Environment.GetEnvironmentVariable, out var gymProblem);
+            if (gymProblem is not null)
+            {
+                Console.Error.WriteLine($"whetstone: {gymProblem}");
+                return 2;
+            }
+            // The judge is the writer's model when the owner configured one; without it a run records no verdicts.
+            var judgeSettings = WriterSettings.From(Environment.GetEnvironmentVariable, out var judgeProblem);
+            if (judgeProblem is not null)
+            {
+                Console.Error.WriteLine($"whetstone: {judgeProblem}");
+                return 2;
+            }
+            return await Commands.GymAsync(gymOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token,
+                gym is null ? null : new ChargehandRunner(gym), judgeSettings is null ? null : new PairwiseJudge(new OpenAiWriter(judgeSettings), judgeSettings));
+        }
     case ["label", .. var labelOptions]:
         return await Commands.LabelAsync(labelOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["outcomes", .. var outcomesOptions]:
