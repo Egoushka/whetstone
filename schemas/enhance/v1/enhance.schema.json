@@ -33,6 +33,7 @@
               "propertyNames": { "pattern": "^[a-z0-9_]{1,40}$" },
               "additionalProperties": { "type": "string", "maxLength": 500 }
             },
+            "level": { "enum": ["cheap", "middle", "best"], "description": "The price level the client chose (a prompt prefix, a budget); a kind may have a champion per level." },
             "ablation": { "type": "string", "minLength": 1, "maxLength": 128, "description": "What the client held out for this session, such as rule:<id> or skill:<name>@<version>; stored so outcomes can be compared per ablation." }
           }
         },

@@ -81,7 +81,9 @@ public sealed record RequestRow
             Prompt = prompt,
             Repository = Clean(context?.Repository),
             Commit = Clean(context?.Commit),
-            TaskKind = Clean(context?.TaskKind ?? response.TaskKind),
+            // A level's champion answers as "<kind>@<level>" (goal 0.10); that kind is the one its trial counts.
+            TaskKind = Clean(response.TaskKind is { } answered && context?.TaskKind is { } sent && answered.StartsWith(sent + "@", StringComparison.Ordinal)
+                ? answered : context?.TaskKind ?? response.TaskKind),
             Client = Clean(context?.Client),
             SessionId = Clean(context?.SessionId),
             Ablation = Clean(context?.Ablation),

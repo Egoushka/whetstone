@@ -574,7 +574,7 @@ public static partial class Commands
         }
     }
 
-    public const string ReportUsage = "usage: whetstone report";
+    public const string ReportUsage = "usage: whetstone report [--routing | --effort]";
 
     /// <summary>
     /// Reads your store and prints, per kind of prompt in a template trial, the runs each arm got, how they went and what the
@@ -584,8 +584,26 @@ public static partial class Commands
         IReadOnlyList<string> options, IStoreAdmin admin, TextWriter output, TextWriter error, CancellationToken ct, TrialSettings? settings = null)
     {
         settings ??= TrialSettings.Default;
-        if (!Parse(options, [], [], out _, out var problem))
+        if (!Parse(options, [], ["--routing", "--effort"], out var reportParsed, out var problem))
             return Refuse(error, problem!, ReportUsage);
+        if (reportParsed!.Count > 1)
+            return Refuse(error, "--routing and --effort are one report each", ReportUsage);
+        if (reportParsed.Count == 1)
+        {
+            try
+            {
+                var all = new List<ExportRecord>();
+                await foreach (var record in admin.ExportAsync(RowFilter.Everything, ct))
+                    all.Add(record);
+                var routing = reportParsed.ContainsKey("--routing");
+                await output.WriteAsync(Routing.Format(Routing.Of(all, settings.Weights, routing ? r => r.Outcome?.Model : r => r.Outcome?.Effort), routing ? "model" : "effort"));
+                return Ok;
+            }
+            catch (Exception e) when (e is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
+            {
+                return Fail(error, "report", e);
+            }
+        }
         try
         {
             var records = new List<ExportRecord>();
