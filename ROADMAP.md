@@ -17,8 +17,9 @@ Legend: ✅ done · ⏳ in progress · ▶ next · · later · ✗ superseded
 ## Stage 1 — It learns from every prompt (0.4–0.7), ADR 0004
 
 The order after 0.5 follows dependency: a trial optimises what it measures, so the reward comes before more evidence,
-and more evidence before the work that needs it. Each spec says where a goal bends [VISION.md](VISION.md). ⏳ on 0.6 and
-0.7 means their code is merged and their bars in docs/evaluation.md wait on live use.
+and more evidence before the work that needs it. Each spec says where a goal bends [VISION.md](VISION.md). ⏳ on 0.6 to
+0.12 means their code in this repository is merged and their bars in docs/evaluation.md wait on live use and on client
+changes listed in each spec (0.8 needs a gym client; 0.11's state-aware trial waits on a privacy decision).
 
 - ⏳ **0.4** It sees every prompt: agent-written prompts (subagent, page extraction, orchestrator) are captured live and
   imported from transcripts with their run measures; every prompt gets a kind (docs/specs/2026-10-10-templates-everywhere-design.md).
@@ -34,19 +35,19 @@ and more evidence before the work that needs it. Each spec says where a goal ben
 
 ## Stage 2 — It learns beyond live traffic (0.8–0.10)
 
-- ▶ **0.8** It replays: a gym client re-runs stored cases with challengers at the original commit; gym outcomes screen
+- ⏳ **0.8** It replays: a gym client re-runs stored cases with challengers at the original commit; gym outcomes screen
   challengers, each champion keeps five unit cases, a model change triggers a canary, harnesses can be compared
   (docs/specs/2026-10-19-replay-gym-design.md).
-- · **0.9** It fills context: template slots from a memory service and from recent failures, and trials of instruction
+- ⏳ **0.9** It fills context: template slots from a memory service and from recent failures, and trials of instruction
   rules and skill versions (docs/specs/2026-10-19-context-slots-design.md).
-- · **0.10** It suggests levels, models and effort: a champion per price level per kind, and routing evidence the owner
+- ⏳ **0.10** It suggests levels, models and effort: a champion per price level per kind, and routing evidence the owner
   turns into rules elsewhere; the client decides (docs/specs/2026-10-19-levels-and-routing-design.md).
 
 ## Stage 3 — It helps the person and the agents (0.11–1.0)
 
-- · **0.11** It helps while writing: a shorthand expander, a pre-send coach, a weekly report on the person's time, and a
+- ⏳ **0.11** It helps while writing: a shorthand expander, a pre-send coach, a weekly report on the person's time, and a
   state-aware template trial behind a privacy decision (docs/specs/2026-10-19-person-facing-design.md).
-- · **0.12** It understands agent structure: orchestrator prompts scored by their children, kinds discovered by
+- ⏳ **0.12** It understands agent structure: orchestrator prompts scored by their children, kinds discovered by
   clustering, graduation proposals for shared instructions, templates for what agents write, and a `brief` tool
   (docs/specs/2026-10-19-agent-structure-design.md).
 - · **1.0** The contract is declared stable.
