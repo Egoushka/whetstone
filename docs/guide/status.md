@@ -34,12 +34,12 @@ section: "Project"
 | Removing stored prompts by content (`forget --text`) | works | [CommandTests.cs](../../tests/Whetstone.Tests/Storage/CommandTests.cs) |
 | Import from OpenCode (part of 0.7) | works | [ROADMAP.md](../../ROADMAP.md) |
 | Replay gym: case selection, pairs, screen (0.8) | partial |
-| Context slots, levels and routing, person-facing help, agent structure (0.9 to 0.12) | not yet | [ROADMAP.md](../../ROADMAP.md) |
+| Context slots, levels and routing, person-facing help, agent structure (0.9 to 0.12) | partial | [ROADMAP.md](../../ROADMAP.md) |
 | A stable contract (1.0) | not yet | [ROADMAP.md](../../ROADMAP.md) |
 | Serving beyond loopback from the command line | not yet | [Program.cs](../../src/Whetstone.Server/Program.cs) |
 | A release binary or package | not yet | [going-public.md](../going-public.md) |
 
-The audit script is `partial`: the changelog says its author checked it once by hand against an unredacted token, and no automated test runs it ([CHANGELOG.md](../../CHANGELOG.md)). The 0.2 bar is `met`: its tests pass, and after a week of the owner's use (2026-10-04 to 2026-10-11) the audit over the owner's store found nothing on 2026-10-12. Goals 0.4 to 0.7 are `partial`: their code is built and tested, and their bars need live use measured with `whetstone report`. The gym (0.8) is `partial`: selection, pairs and the screen are tested with a fake client; no real gym client exists yet.
+The audit script is `partial`: the changelog says its author checked it once by hand against an unredacted token, and no automated test runs it ([CHANGELOG.md](../../CHANGELOG.md)). The 0.2 bar is `met`: its tests pass, and after a week of the owner's use (2026-10-04 to 2026-10-11) the audit over the owner's store found nothing on 2026-10-12. Goals 0.4 to 0.12 are `partial`: their code is built and tested, and their bars need live use measured with `whetstone report` and the client changes each spec lists. The gym (0.8) is `partial`: selection, pairs and the screen are tested with a fake client; no real gym client exists yet.
 
 ## What `enhance` returns
 
