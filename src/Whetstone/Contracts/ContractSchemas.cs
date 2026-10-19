@@ -16,6 +16,13 @@ public static class ContractSchemas
 
     public static JsonElement FeedbackRequest { get; } = Standalone(Node("feedback"));
 
+    public static JsonElement BriefRequest { get; } = Standalone(Node("brief"));
+
+    private static readonly JsonSchema BriefRequestSchema = JsonSchema.FromText(BriefRequest.GetRawText());
+
+    /// <summary>Errors against brief/v1; empty means valid.</summary>
+    public static IReadOnlyList<string> ValidateBrief(JsonElement request) => Validate(BriefRequestSchema, request);
+
     private static readonly JsonSchema ExportSchema = JsonSchema.FromText(Standalone(Node("export")).GetRawText());
 
     private static readonly JsonSchema LibrarySchema = JsonSchema.FromText(Standalone(Node("library")).GetRawText());

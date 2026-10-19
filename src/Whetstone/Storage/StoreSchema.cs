@@ -5,12 +5,12 @@ namespace Whetstone.Storage;
 
 /// <summary>
 /// The file's tables and how an older file becomes the current one. Version 2 adds <c>source_request_id</c> (which stored request a
-/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). Version 6 adds the owner's hand label, the template decision log and the replay gym's tables (ADR 0006). Version 7 lets a kind have several challengers. Version 8 keeps the rewrite a client's model wrote beside the prompt. Version 9 adds traits and the traits drawn for each request. Version 10 adds the ledger of the challenger writer's spend. Version 11 adds the ablation a client applied and the memories shown to each request (docs/specs/2026-10-19-context-slots-design.md). The index holds no text of its own: it points at <c>requests</c>, so a
+/// retrieval drew on) and a full-text index over the prompt. Version 3 adds the run measures <c>feedback</c> can report. Version 4 adds the arm a request was given and the template store. Version 5 adds the session id and the reward measures (docs/specs/2026-10-19-reward-signals-design.md). Version 6 adds the owner's hand label, the template decision log and the replay gym's tables (ADR 0006). Version 7 lets a kind have several challengers. Version 8 keeps the rewrite a client's model wrote beside the prompt. Version 9 adds traits and the traits drawn for each request. Version 10 adds the ledger of the challenger writer's spend. Version 11 adds the ablation a client applied and the memories shown to each request (docs/specs/2026-10-19-context-slots-design.md). Version 12 adds the parent request an orchestrator's child names and the reader's measures of an agent's output (docs/specs/2026-10-19-agent-structure-design.md). The index holds no text of its own: it points at <c>requests</c>, so a
 /// row deleted there is deleted from the index in the same statement, and <c>forget</c> rebuilds it before the file is compacted.
 /// </summary>
 internal static class StoreSchema
 {
-    public const int Version = 11;
+    public const int Version = 12;
 
     /// <summary>The oldest file the commands can still read; the server upgrades it on first use.</summary>
     public const int OldestReadable = 1;
@@ -73,7 +73,10 @@ internal static class StoreSchema
           hand_label INTEGER,
           rewritten_prompt TEXT,
           traits TEXT,
-          ablation TEXT
+          ablation TEXT,
+          parent_request_id TEXT,
+          read_ms INTEGER,
+          edit_chars INTEGER
         );
         CREATE INDEX IF NOT EXISTS requests_by_repository ON requests (repository, created_at);
         """;
@@ -263,6 +266,9 @@ internal static class StoreSchema
         if (found is >= 1 and <= 10)
             await Run(connection, transaction, "ALTER TABLE requests ADD COLUMN ablation TEXT", ct);
         await Run(connection, transaction, MemoryExposures, ct);
+        if (found is >= 1 and <= 11)
+            foreach (var column in new[] { "parent_request_id TEXT", "read_ms INTEGER", "edit_chars INTEGER" })
+                await Run(connection, transaction, $"ALTER TABLE requests ADD COLUMN {column}", ct);
         await Run(connection, transaction, Templates, ct);
         await Run(connection, transaction, Index, ct);
         await Run(connection, transaction, RebuildIndex, ct);

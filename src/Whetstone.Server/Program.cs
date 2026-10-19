@@ -22,6 +22,8 @@ const string Usage = """
       trait list|add|retire                the owner's act on traits: named paragraphs drawn on or off for half a kind's requests
       template list|export|write|add|promote|retire the owner's act on templates: add a challenger, promote it over the champion, retire
                                             a version (options: whetstone template without arguments)
+      kinds suggest [--limit N]             proposed kinds for prompts no rule names well (reads only)
+      graduate                              proposals for shared instructions: champions that won, rules that never mattered
       gym select --kind K [--limit N] [--confirm]
                                             stored requests of a read-only kind that a replay gym can run again (ADR 0006)
       gym run|report --challenger ID@VERSION
@@ -131,6 +133,10 @@ switch (args)
         return await Commands.ReindexAsync(reindexOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["import", .. var importOptions]:
         return await Commands.ImportAsync(importOptions, stores.ForUser(user), stores.AdminFor(user), new GitHistory(), Console.Out, Console.Error, cts.Token);
+    case ["kinds", .. var kindsOptions]:
+        return await Commands.KindsAsync(kindsOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
+    case ["graduate", .. var graduateOptions]:
+        return await Commands.GraduateAsync(graduateOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["gym", .. var gymOptions]:
         return await Commands.GymAsync(gymOptions, stores.AdminFor(user), Console.Out, Console.Error, cts.Token);
     case ["label", .. var labelOptions]:

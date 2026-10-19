@@ -46,7 +46,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
         command.CommandText = $"""
             SELECT request_id, created_at, prompt, truncated, repository, commit_sha, task_kind, client, changed, template_id, template_version, held_out,
                    rewrite_accepted, model_overridden, score, cost_usd, model, feedback_at, {(version >= 2 ? "source_request_id" : "NULL")}, {measures},
-                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}, {(version >= 9 ? "traits" : "NULL")}, {(version >= 11 ? "ablation" : "NULL")}
+                   {(version >= 4 ? "arm" : "NULL")}, {rewards}, {(version >= 6 ? "hand_label" : "NULL")}, {(version >= 8 ? "rewritten_prompt" : "NULL")}, {(version >= 9 ? "traits" : "NULL")}, {(version >= 11 ? "ablation" : "NULL")}, {(version >= 12 ? "parent_request_id, read_ms, edit_chars" : "NULL, NULL, NULL")}
             FROM requests {Where} ORDER BY created_at, request_id
             """;
         Bind(command, filter);
@@ -56,7 +56,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
             var reported = reader.IsDBNull(17) ? null : reader.GetString(17);
             yield return new ExportRecord(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3) != 0,
-                new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7), Text(reader, 29), Text(reader, 42)),
+                new ExportContext(Text(reader, 4), Text(reader, 5), Text(reader, 6), Text(reader, 7), Text(reader, 29), Text(reader, 42), Text(reader, 43)),
                 new ExportAnswer(reader.GetInt64(8) != 0, Text(reader, 9), Text(reader, 10), reader.GetInt64(11) != 0, Text(reader, 18), Text(reader, 28), TraitsOf(Text(reader, 41))),
                 reported is null
                     ? null
@@ -64,7 +64,7 @@ internal sealed class SqliteStoreAdmin(string path) : IStoreAdmin
                         Flag(reader, 19), Count(reader, 20), Count(reader, 21), Count(reader, 22), Count(reader, 23), Count(reader, 24), Count(reader, 25),
                         Flag(reader, 26), Text(reader, 27),
                         Count(reader, 30), Flag(reader, 31), Flag(reader, 32), Flag(reader, 33), Flag(reader, 34), Text(reader, 35), Count(reader, 36),
-                        Count(reader, 37), Count(reader, 38), Text(reader, 40)),
+                        Count(reader, 37), Count(reader, 38), Text(reader, 40), Count(reader, 44), Count(reader, 45)),
                 Flag(reader, 39));
         }
     }
